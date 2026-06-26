@@ -65,7 +65,7 @@ export function useAuth() {
       } else {
         setUser(null);
       }
-      setLoading(false);
+      // intentionally no setLoading(false) here — initAuth owns the loading state
     });
 
     return () => subscription.unsubscribe();
