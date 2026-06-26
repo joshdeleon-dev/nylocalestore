@@ -163,6 +163,36 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  const token = request.headers.get('authorization')?.slice(7);
+  if (!token) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+  const { data: { user } } = await db.auth.getUser(token);
+  if (!user) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+  const { data: profile } = await db.from('users').select('*, role:roles(name)').eq('id', user.id).single();
+  if (!['ADMIN', 'MANAGER'].includes((profile as any)?.role?.name)) {
+    return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+  }
+  try {
+    const { ids } = await request.json();
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ success: false, error: 'ids array required' }, { status: 400 });
+    }
+    let deleted = 0;
+    for (const orderId of ids as number[]) {
+      const { data: orderItems } = await db.from('order_items').select('product_id, quantity').eq('order_id', orderId);
+      for (const item of (orderItems || []) as { product_id: number; quantity: number }[]) {
+        const { data: inv } = await db.from('inventory').select('id, current_stock').eq('product_id', item.product_id).eq('location_id', 1).single();
+        if (inv) await db.from('inventory').update({ current_stock: (inv as any).current_stock + item.quantity }).eq('id', (inv as any).id);
+      }
+      const { error } = await db.from('orders').delete().eq('id', orderId);
+      if (!error) deleted++;
+    }
+    return NextResponse.json({ success: true, deleted });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message || 'Failed to delete orders' }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     const { id, ...updates } = await request.json();

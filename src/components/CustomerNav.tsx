@@ -15,7 +15,7 @@ export default function CustomerNav({ wide = false, backHref, backLabel }: Custo
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <header className="sticky top-0 z-50 bg-coffee-700 text-white shadow-lg">
+    <header className="sticky top-0 z-50 bg-[#8c684c] text-white shadow-lg">
       <div className={`${wide ? 'max-w-6xl' : 'max-w-2xl'} mx-auto px-4 py-4 flex items-center justify-between`}>
         <div className="flex items-center gap-4">
           {backHref && (

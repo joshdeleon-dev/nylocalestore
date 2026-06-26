@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Order, OrderStatus, Product, PaymentMethod } from '@/types';
 import { formatCurrency, formatDate, formatDateTime, getOrderStatusColor, getOrderStatusLabel } from '@/utils/helpers';
-import { Search, RefreshCw, X, Trash2, AlertTriangle, Pencil } from 'lucide-react';
+import { Search, RefreshCw, X, Trash2, AlertTriangle, Pencil, CheckSquare, Square } from 'lucide-react';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
 import { StickerPrint } from '@/components/StickerPrint';
@@ -21,6 +21,9 @@ export default function ManagerOrdersPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Edit order state
   const [editOrder, setEditOrder] = useState<Order | null>(null);
@@ -123,6 +126,29 @@ export default function ManagerOrdersPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch('/api/orders', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+      toast.success(`${json.deleted} order${json.deleted !== 1 ? 's' : ''} deleted — inventory restored`);
+      setSelectedIds(new Set());
+      setConfirmBulkDelete(false);
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete orders');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const updateStatus = async (orderId: number, status: OrderStatus) => {
     try {
       const res = await fetch('/api/orders', {
@@ -195,11 +221,38 @@ export default function ManagerOrdersPage() {
         </select>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
+          <span className="text-sm font-medium text-red-800">
+            {selectedIds.size} order{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <button onClick={() => setSelectedIds(new Set())} className="text-xs text-red-500 hover:underline">
+            Clear
+          </button>
+          <button
+            onClick={() => setConfirmBulkDelete(true)}
+            className="ml-auto btn btn-sm bg-red-600 text-white hover:bg-red-700 border-0 gap-1.5"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete {selectedIds.size} Order{selectedIds.size !== 1 ? 's' : ''}
+          </button>
+        </div>
+      )}
+
       <div className="card">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    className="checkbox"
+                    checked={filtered.length > 0 && filtered.every((o) => selectedIds.has(o.id))}
+                    ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && !filtered.every((o) => selectedIds.has(o.id)); }}
+                    onChange={(e) => setSelectedIds(e.target.checked ? new Set(filtered.map((o) => o.id)) : new Set())}
+                  />
+                </th>
                 <SortableHeader label="Order #"  sortKey="order_number"  currentKey={sortKey} dir={sortDir} onSort={requestSort} />
                 <SortableHeader label="Customer" sortKey="customer_name" currentKey={sortKey} dir={sortDir} onSort={requestSort} />
                 <SortableHeader label="Items"    sortKey="items"         currentKey={sortKey} dir={sortDir} onSort={requestSort} />
@@ -211,10 +264,22 @@ export default function ManagerOrdersPage() {
             <tbody className="divide-y divide-gray-50">
               {loading
                 ? Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i}><td colSpan={6} className="px-5 py-3"><div className="skeleton h-4 rounded" /></td></tr>
+                    <tr key={i}><td colSpan={7} className="px-5 py-3"><div className="skeleton h-4 rounded" /></td></tr>
                   ))
                 : filtered.map((o) => (
-                    <tr key={o.id} onClick={() => { setSelected(o); setConfirmDelete(false); }} className="hover:bg-gray-50 cursor-pointer">
+                    <tr key={o.id} onClick={() => { setSelected(o); setConfirmDelete(false); }} className={`cursor-pointer transition-colors ${selectedIds.has(o.id) ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-gray-50'}`}>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="checkbox"
+                          checked={selectedIds.has(o.id)}
+                          onChange={() => setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            next.has(o.id) ? next.delete(o.id) : next.add(o.id);
+                            return next;
+                          })}
+                        />
+                      </td>
                       <td className="px-5 py-3 font-mono text-coffee-700 text-xs font-semibold">{o.order_number}</td>
                       <td className="px-5 py-3 font-medium">{o.customer_name} <span className="text-xs text-gray-400">#{o.group_number}</span></td>
                       <td className="px-5 py-3 text-gray-600">{o.items?.length ?? 0}</td>
@@ -312,6 +377,34 @@ export default function ManagerOrdersPage() {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {confirmBulkDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setConfirmBulkDelete(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h2 className="font-bold text-gray-900">Delete {selectedIds.size} order{selectedIds.size !== 1 ? 's' : ''}?</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  This will permanently delete the selected orders and restore their inventory quantities. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmBulkDelete(false)} className="btn btn-secondary flex-1 justify-center">Cancel</button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="btn flex-1 justify-center bg-red-600 text-white hover:bg-red-700 border-0"
+              >
+                {bulkDeleting ? 'Deleting…' : 'Yes, Delete All'}
+              </button>
             </div>
           </div>
         </div>

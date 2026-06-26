@@ -87,13 +87,21 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
     const productId = parseInt(id);
 
-    // Remove dependent rows before deleting the product
+    // If order_items reference this product, soft-delete to preserve order history
+    const { count } = await db.from('order_items').select('id', { count: 'exact', head: true }).eq('product_id', productId);
+    if (count && count > 0) {
+      const { error } = await db.from('products').update({ is_available: false }).eq('id', productId);
+      if (error) throw error;
+      return NextResponse.json({ ok: true, softDeleted: true });
+    }
+
+    // No order history — safe to hard delete
     await db.from('inventory').delete().eq('product_id', productId);
     await db.from('product_modifier_groups').delete().eq('product_id', productId);
 
     const { error } = await db.from('products').delete().eq('id', productId);
     if (error) throw error;
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, softDeleted: false });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

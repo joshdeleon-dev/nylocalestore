@@ -146,7 +146,7 @@ export default function ProductDetailPage() {
             <img
               src={product.image_url}
               alt={product.name}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain"
             />
           ) : (
             <Coffee className="w-24 h-24 text-coffee-300" />

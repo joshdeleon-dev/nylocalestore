@@ -194,7 +194,11 @@ export default function ManagerProductsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success('Product deleted');
+      if (data.softDeleted) {
+        toast.success(`"${p.name}" has order history — marked as unavailable instead of deleted`);
+      } else {
+        toast.success('Product deleted');
+      }
       fetchAll();
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete product');

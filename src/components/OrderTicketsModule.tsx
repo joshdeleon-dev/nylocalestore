@@ -69,15 +69,15 @@ function TicketPreview({ t }: { t: TicketData }) {
       </div>
       <div className="font-semibold text-[10px] truncate mt-0.5">{t.item_name}</div>
       {t.modifiers.length > 0 && (
-        <div className="text-[8px] text-gray-500 truncate">{t.modifiers.map((m) => `• ${m}`).join('  ')}</div>
+        <div className="text-[8.8px] text-black truncate">{t.modifiers.map((m) => `• ${m}`).join('  ')}</div>
       )}
       <div className="flex items-end justify-between border-t border-gray-200 pt-1 mt-auto">
-        <span className="text-[8px] text-gray-400 truncate flex-1">{t.notes || ''}</span>
+        <span className="text-[8.8px] text-black truncate flex-1">{t.notes || ''}</span>
         {t.ticket_total > 1 && (
           <span className="text-[9px] font-bold ml-2 flex-shrink-0">{t.ticket_index} of {t.ticket_total}</span>
         )}
       </div>
-      <div className="text-[7px] text-gray-400 mt-0.5">
+      <div className="text-[7px] text-black mt-0.5">
         {t.is_custom ? 'CUSTOM' : t.order_number}{t.sales_date ? ` · ${t.sales_date}` : ''}
       </div>
     </div>
@@ -222,11 +222,11 @@ body { font-family: 'Courier New', monospace; background: white; color: black; }
 .name { font-size: 12.5pt; font-weight: bold; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 78%; }
 .grp  { font-size: 10.5pt; font-weight: bold; flex-shrink: 0; }
 .item { font-size: 9pt; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
-.mods { font-size: 7pt; color: #444; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.mods { font-size: 7.7pt; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
 .bot  { display: flex; justify-content: space-between; align-items: flex-end; border-top: 0.5px solid #bbb; padding-top: 2px; margin-top: auto; }
-.notes { font-size: 6.5pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notes { font-size: 7.2pt; color: #000; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cnt  { font-size: 8.5pt; font-weight: bold; margin-left: 6px; flex-shrink: 0; }
-.meta { font-size: 5.5pt; color: #999; margin-top: 1px; }
+.meta { font-size: 5.5pt; color: #000; margin-top: 1px; }
 @media screen { body { background: #e8e8e8; padding: 20px; } .ticket { margin: 10px auto; box-shadow: 0 1px 4px rgba(0,0,0,.2); } }
 </style></head>
 <body>${stickers}
