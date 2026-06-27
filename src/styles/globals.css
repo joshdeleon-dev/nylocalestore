@@ -8,10 +8,11 @@
 
 html {
   scroll-behavior: smooth;
+  color-scheme: light;
 }
 
 body {
-  @apply antialiased;
+  @apply bg-white text-gray-900 antialiased;
 }
 
 /* Typography */
