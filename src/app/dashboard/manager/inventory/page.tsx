@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, RefreshCw, X } from 'lucide-react';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
+import { formatDate } from '@/utils/helpers';
 import toast from 'react-hot-toast';
 
 interface InventoryRow {
@@ -13,6 +14,7 @@ interface InventoryRow {
   current_stock: number;
   low_stock_threshold: number;
   unit_of_measure: string;
+  created_at: string;
   product: { name: string };
   location: { name: string };
 }
@@ -70,6 +72,7 @@ export default function ManagerInventoryPage() {
     stock:     (i) => i.current_stock,
     threshold: (i) => i.low_stock_threshold,
     status:    (i) => i.current_stock === 0 ? 0 : i.current_stock <= i.low_stock_threshold ? 1 : 2,
+    created:   (i) => i.created_at,
   });
 
   return (
@@ -104,6 +107,7 @@ export default function ManagerInventoryPage() {
                 <SortableHeader label="Stock"     sortKey="stock"     currentKey={sortKey} dir={sortDir} onSort={requestSort} />
                 <SortableHeader label="Threshold" sortKey="threshold" currentKey={sortKey} dir={sortDir} onSort={requestSort} />
                 <SortableHeader label="Status"    sortKey="status"    currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Created"   sortKey="created"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
                 <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Action</th>
               </tr>
             </thead>
@@ -120,6 +124,9 @@ export default function ManagerInventoryPage() {
                       {isOut ? <span className="badge badge-danger">Out of Stock</span>
                         : isLow ? <span className="badge badge-warning">Low Stock</span>
                         : <span className="badge badge-success">In Stock</span>}
+                    </td>
+                    <td className="px-5 py-3 text-gray-500 text-xs">
+                      {item.created_at ? formatDate(item.created_at.slice(0, 10)) : '—'}
                     </td>
                     <td className="px-5 py-3">
                       <button onClick={() => { setAdjustItem(item); setQty(''); setReason('manual_adjustment'); }} className="btn btn-secondary btn-sm">Adjust</button>
