@@ -14,7 +14,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { TrendingUp, ShoppingBag, DollarSign, RefreshCw, TableProperties } from 'lucide-react';
+import { TrendingUp, ShoppingBag, DollarSign, RefreshCw, TableProperties, X } from 'lucide-react';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
 import ReportBuilder from '@/components/ReportBuilder';
@@ -23,8 +23,14 @@ type Period = 'today' | 'week' | 'month';
 
 interface DailyStat {
   date: string;
+  rawDate: string;
   revenue: number;
   orders: number;
+}
+
+interface DrilldownState {
+  title: string;
+  orders: any[];
 }
 
 interface ProductStat {
@@ -89,6 +95,8 @@ export default function AdminReportsPage() {
   const [topProducts, setTopProducts] = useState<ProductStat[]>([]);
   const [hourlyStats, setHourlyStats] = useState<HourStat[]>([]);
   const [groupStats, setGroupStats] = useState<GroupStat[]>([]);
+  const [rawOrders, setRawOrders] = useState<any[]>([]);
+  const [drilldown, setDrilldown] = useState<DrilldownState | null>(null);
 
   const fetchReports = async () => {
     setLoading(true);
@@ -107,6 +115,8 @@ export default function AdminReportsPage() {
       const res = await fetch(`/api/orders?start_date=${startDate}&limit=1000`);
       const json = await res.json();
       const orders = json.data || [];
+      setRawOrders(orders);
+      setDrilldown(null);
 
       if (!orders.length && !res.ok) return;
 
@@ -134,6 +144,7 @@ export default function AdminReportsPage() {
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([date, stats]) => ({
             date: formatDate(date),
+            rawDate: date,
             ...stats,
           }))
       );
@@ -187,6 +198,36 @@ export default function AdminReportsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGroupDrilldown = (data: any) => {
+    const groupNum = parseInt(data.group.replace('Group ', ''), 10);
+    setDrilldown({ title: `Orders — ${data.group}`, orders: rawOrders.filter((o) => o.group_number === groupNum) });
+  };
+
+  const handleDayDrilldown = (data: any) => {
+    setDrilldown({ title: `Orders on ${data.date}`, orders: rawOrders.filter((o) => o.sales_date === data.rawDate) });
+  };
+
+  const handleProductDrilldown = (data: any) => {
+    setDrilldown({
+      title: `Orders containing "${data.name}"`,
+      orders: rawOrders.filter((o) => (o.items || []).some((i: any) => (i.product?.name || '') === data.name)),
+    });
+  };
+
+  const handleHourDrilldown = (data: any) => {
+    const h = parseInt(data.hour, 10);
+    setDrilldown({
+      title: `Orders at ${data.hour} (Eastern)`,
+      orders: rawOrders.filter((o) => {
+        const hour = parseInt(
+          new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' })
+            .format(new Date(o.order_date || o.created_at)), 10
+        );
+        return hour === h;
+      }),
+    });
   };
 
   useEffect(() => {
@@ -283,7 +324,7 @@ export default function AdminReportsPage() {
                   <XAxis dataKey="group" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
                   <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                  <Bar dataKey="revenue" fill="#4a3728" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="revenue" fill="#4a3728" radius={[4, 4, 0, 0]} onClick={handleGroupDrilldown} style={{ cursor: 'pointer' }} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -306,7 +347,7 @@ export default function AdminReportsPage() {
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
-                <Bar dataKey="orders" fill="#6f4e37" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="orders" fill="#6f4e37" radius={[4, 4, 0, 0]} onClick={handleDayDrilldown} style={{ cursor: 'pointer' }} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -332,6 +373,8 @@ export default function AdminReportsPage() {
                       `${name.slice(0, 12)} ${(percent * 100).toFixed(0)}%`
                     }
                     labelLine={false}
+                    onClick={handleProductDrilldown}
+                    style={{ cursor: 'pointer' }}
                   >
                     {topProducts.map((_, index) => (
                       <Cell key={index} fill={COLORS[index % COLORS.length]} />
@@ -361,7 +404,7 @@ export default function AdminReportsPage() {
                   <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Bar dataKey="orders" fill="#b39f92" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="orders" fill="#b39f92" radius={[4, 4, 0, 0]} onClick={handleHourDrilldown} style={{ cursor: 'pointer' }} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -375,6 +418,66 @@ export default function AdminReportsPage() {
 
       {/* Top Products Table */}
       <TopProductsTable products={topProducts} />
+
+      {/* Drill-down Panel */}
+      {drilldown && (
+        <div className="card mt-6">
+          <div className="card-content border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">{drilldown.title}</h2>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400">{drilldown.orders.length} order{drilldown.orders.length !== 1 ? 's' : ''}</span>
+              <button onClick={() => setDrilldown(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            {drilldown.orders.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">No orders match this selection.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Order #</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Customer</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Items</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {drilldown.orders.map((o) => (
+                    <tr key={o.id} className="hover:bg-gray-50">
+                      <td className="px-5 py-3 font-mono text-xs font-semibold text-coffee-700">{o.order_number}</td>
+                      <td className="px-5 py-3">
+                        <p className="font-medium text-gray-900">{o.customer_name}</p>
+                        <p className="text-xs text-gray-400">Group #{o.group_number}</p>
+                      </td>
+                      <td className="px-5 py-3 text-xs text-gray-500">{formatDate(o.sales_date)}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          o.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                          o.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                          o.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-800' :
+                          o.status === 'READY' ? 'bg-indigo-100 text-indigo-800' :
+                          o.status === 'ACCEPTED' ? 'bg-purple-100 text-purple-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>{o.status}</span>
+                      </td>
+                      <td className="px-5 py-3 text-xs text-gray-600">
+                        {(o.items || []).slice(0, 3).map((i: any) => `${i.quantity}× ${i.product?.name || '?'}`).join(', ')}
+                        {(o.items || []).length > 3 ? ` +${(o.items || []).length - 3} more` : ''}
+                      </td>
+                      <td className="px-5 py-3 text-right font-semibold text-gray-900">{formatCurrency(o.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
       </>}
     </div>
   );

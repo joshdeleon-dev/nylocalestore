@@ -6,10 +6,11 @@ import * as XLSX from 'xlsx';
 import {
   Play, Download, FileSpreadsheet, ChevronDown, ChevronRight,
   AlertCircle, Loader2, Save, BookOpen, Trash2, X,
-  ChevronUp, ChevronsUpDown,
+  ChevronUp, ChevronsUpDown, Grid3x3, Printer,
 } from 'lucide-react';
 import { SavedReport } from '@/types';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '@/utils/helpers';
 
 interface FieldDef { key: string; label: string; }
 interface FieldGroup { group: string; fields: FieldDef[]; }
@@ -67,7 +68,7 @@ const INVENTORY_FIELD_GROUPS: FieldGroup[] = [
   },
 ];
 
-const ORDER_DEFAULTS = new Set(['order_number', 'customer_name', 'group_number', 'order_date', 'status', 'total', 'product_name', 'quantity', 'line_total']);
+const ORDER_DEFAULTS = new Set(['order_number', 'customer_name', 'group_number', 'order_date', 'sales_date', 'status', 'total', 'product_name', 'quantity', 'unit_price', 'line_total']);
 const INVENTORY_DEFAULTS = new Set(['product_name', 'current_stock']);
 const ORDER_STATUSES = ['NEW', 'ACCEPTED', 'IN_PROGRESS', 'READY', 'COMPLETED', 'CANCELLED'];
 
@@ -138,6 +139,14 @@ export default function ReportBuilder() {
   const [saveName, setSaveName] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [pivotMode, setPivotMode] = useState(false);
+  const [pivotRows, setPivotRows] = useState<string[]>([]);
+  const [pivotCol, setPivotCol] = useState('');
+  const [pivotValues, setPivotValues] = useState<string[]>([]);
+  const [pivotAgg, setPivotAgg] = useState<'count' | 'sum' | 'avg' | 'min' | 'max'>('sum');
+  const [pivotFilters, setPivotFilters] = useState<{ id: number; field: string; op: string; value: string }[]>([]);
+  const [pivotSubtotalFields, setPivotSubtotalFields] = useState<string[]>([]);
+
   const fieldGroups = source === 'orders' ? ORDER_FIELD_GROUPS : INVENTORY_FIELD_GROUPS;
 
   const requestSort = (key: string) => {
@@ -164,6 +173,171 @@ export default function ReportBuilder() {
       return sortDir === 'asc' ? cmp : -cmp;
     });
   }, [rows, sortKey, sortDir]);
+
+  const KNOWN_NUMERIC = new Set(['quantity', 'unit_price', 'line_total', 'subtotal', 'tax', 'total', 'current_stock', 'quantity_change', 'group_number']);
+
+  const numericFields = useMemo(
+    () => orderedFields.filter((f) =>
+      KNOWN_NUMERIC.has(f) || (rows.length > 0 && rows.slice(0, 5).some((r) => r[f] != null && r[f] !== '' && !isNaN(Number(r[f]))))
+    ),
+    [rows, orderedFields]
+  );
+
+  const pivotResult = useMemo(() => {
+    if (!pivotRows.length || !rows.length) return null;
+    if (pivotAgg !== 'count' && !pivotValues.length) return null;
+
+    const colField = pivotCol || null;
+    const effectiveVFs = pivotAgg === 'count' ? ['__count__'] : pivotValues;
+
+    // Strip "$" and "," so currency strings like "$3.50" become 3.5
+    const parseNum = (v: any): number => {
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string') return parseFloat(v.replace(/[$,]/g, '')) || 0;
+      return 0;
+    };
+
+    const activeFilters = pivotFilters.filter((pf) => pf.field && pf.value !== '');
+    const filteredRows = activeFilters.length === 0 ? rows : rows.filter((row) =>
+      activeFilters.every(({ field, op, value }) => {
+        const rv = String(row[field] ?? '').toLowerCase();
+        const fv = value.toLowerCase();
+        const rn = parseNum(row[field]);
+        const fn = parseFloat(value) || 0;
+        const parts = fv.split(',').map((v) => v.trim()).filter(Boolean);
+        switch (op) {
+          case '=':        return parts.some((p) => rv === p);
+          case '!=':       return parts.every((p) => rv !== p);
+          case 'contains': return parts.some((p) => rv.includes(p));
+          case 'starts':   return parts.some((p) => rv.startsWith(p));
+          case '>':        return rn > fn;
+          case '<':        return rn < fn;
+          case '>=':       return rn >= fn;
+          case '<=':       return rn <= fn;
+          default:         return true;
+        }
+      })
+    );
+
+    const SEP = '\x00';
+    type ColData = Record<string, Record<string, number[]>>;
+    const entryMap = new Map<string, { fieldValues: string[]; colData: ColData }>();
+
+    for (const row of filteredRows) {
+      const fieldValues = pivotRows.map((f) => String(row[f] ?? '(blank)'));
+      const compositeKey = fieldValues.join(SEP);
+      const cv = colField ? String(row[colField] ?? '(blank)') : '_';
+      if (!entryMap.has(compositeKey)) entryMap.set(compositeKey, { fieldValues, colData: {} });
+      const entry = entryMap.get(compositeKey)!;
+      if (!entry.colData[cv]) entry.colData[cv] = {};
+      for (const vf of effectiveVFs) {
+        if (!entry.colData[cv][vf]) entry.colData[cv][vf] = [];
+        entry.colData[cv][vf].push(pivotAgg === 'count' ? 1 : parseNum(row[vf]));
+      }
+    }
+
+    const agg = (vals: number[]): number => {
+      if (!vals.length) return 0;
+      switch (pivotAgg) {
+        case 'count': return vals.length;
+        case 'sum':   return vals.reduce((a, b) => a + b, 0);
+        case 'avg':   return vals.reduce((a, b) => a + b, 0) / vals.length;
+        case 'min':   return Math.min(...vals);
+        case 'max':   return Math.max(...vals);
+      }
+    };
+
+    const nat = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
+    const sortedEntries = [...entryMap.values()].sort((a, b) => {
+      for (let i = 0; i < a.fieldValues.length; i++) {
+        const cmp = nat(a.fieldValues[i] ?? '', b.fieldValues[i] ?? '');
+        if (cmp !== 0) return cmp;
+      }
+      return 0;
+    });
+
+    const colValues = colField
+      ? [...new Set(rows.map((r) => String(r[colField] ?? '(blank)')))].sort(nat)
+      : ['_'];
+
+    type ColDef = { key: string; label: string; colValue: string; vf: string };
+    const colDefs: ColDef[] = colValues.flatMap((cv) =>
+      effectiveVFs.map((vf) => {
+        const vfLabel = vf === '__count__' ? 'Count' : (FIELD_LABELS[vf] ?? vf);
+        const label = colField
+          ? effectiveVFs.length > 1 ? `${cv} · ${vfLabel}` : cv
+          : vfLabel;
+        return { key: `${cv}__${vf}`, label, colValue: cv, vf };
+      })
+    );
+
+    const hierarchicalRows = sortedEntries.map(({ fieldValues, colData }) => {
+      const cells: Record<string, number> = {};
+      for (const cd of colDefs) cells[cd.key] = agg(colData[cd.colValue]?.[cd.vf] ?? []);
+      const rowTotals: Record<string, number> = {};
+      for (const vf of effectiveVFs) rowTotals[vf] = agg(colValues.flatMap((cv) => colData[cv]?.[vf] ?? []));
+      return { fieldValues, cells, rowTotals };
+    });
+
+    const colTotals: Record<string, number> = {};
+    for (const cd of colDefs) colTotals[cd.key] = agg(sortedEntries.flatMap(({ colData }) => colData[cd.colValue]?.[cd.vf] ?? []));
+
+    const showRowTotals = colField !== null && colValues.length > 1;
+    const rowTotalDefs = showRowTotals
+      ? effectiveVFs.map((vf) => ({
+          vf,
+          label: effectiveVFs.length > 1
+            ? `Total ${vf === '__count__' ? 'Count' : (FIELD_LABELS[vf] ?? vf)}`
+            : 'Total',
+        }))
+      : [];
+
+    const grandTotals: Record<string, number> = {};
+    for (const vf of effectiveVFs) grandTotals[vf] = agg(sortedEntries.flatMap(({ colData }) => colValues.flatMap((cv) => colData[cv]?.[vf] ?? [])));
+
+    const rowLabel = pivotRows.map((f) => FIELD_LABELS[f] ?? f).join(' · ');
+
+    // Subtotals
+    const subtotalLevelIndices = pivotSubtotalFields
+      .map((sf) => pivotRows.indexOf(sf))
+      .filter((idx) => idx >= 0 && idx < pivotRows.length - 1);
+
+    type SubtotalEntry = { cells: Record<string, number>; rowTotals: Record<string, number> };
+    const subtotalMap = new Map<string, SubtotalEntry>();
+
+    if (subtotalLevelIndices.length > 0) {
+      const levelAccums = new Map<number, Map<string, ColData>>();
+      for (const li of subtotalLevelIndices) levelAccums.set(li, new Map());
+
+      for (const { fieldValues, colData } of entryMap.values()) {
+        for (const li of subtotalLevelIndices) {
+          const prefixKey = fieldValues.slice(0, li + 1).join(SEP);
+          const accum = levelAccums.get(li)!;
+          if (!accum.has(prefixKey)) accum.set(prefixKey, {});
+          const target = accum.get(prefixKey)!;
+          for (const [cv, vfMap] of Object.entries(colData)) {
+            if (!target[cv]) target[cv] = {};
+            for (const [vf, vals] of Object.entries(vfMap)) {
+              if (!target[cv][vf]) target[cv][vf] = [];
+              target[cv][vf].push(...vals);
+            }
+          }
+        }
+      }
+
+      for (const [li, accum] of levelAccums) {
+        for (const [prefixKey, colData] of accum) {
+          const subCells: Record<string, number> = {};
+          for (const cd of colDefs) subCells[cd.key] = agg(colData[cd.colValue]?.[cd.vf] ?? []);
+          const subRowTotals: Record<string, number> = {};
+          for (const vf of effectiveVFs) subRowTotals[vf] = agg(colValues.flatMap((cv) => colData[cv]?.[vf] ?? []));
+          subtotalMap.set(`${li}\x00${prefixKey}`, { cells: subCells, rowTotals: subRowTotals });
+        }
+      }
+    }
+
+    return { hierarchicalRows, rowFields: pivotRows, colDefs, colTotals, grandTotals, rowTotalDefs, showRowTotals, effectiveVFs, rowLabel, subtotalMap };
+  }, [pivotRows, pivotCol, pivotValues, pivotAgg, pivotFilters, pivotSubtotalFields, rows]);
 
   const loadSavedReports = async () => {
     try {
@@ -279,6 +453,45 @@ export default function ReportBuilder() {
   };
 
   const filename = `ny-locale-${source}-report-${new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date())}`;
+
+  const MONEY_FIELDS = new Set(['total', 'subtotal', 'tax', 'unit_price', 'line_total']);
+
+  const formatPivotVal = (v: number, vf: string): string => {
+    if (vf === '__count__') return Math.round(v).toLocaleString();
+    if (MONEY_FIELDS.has(vf)) return formatCurrency(v);
+    if (pivotAgg === 'avg') return v.toFixed(2);
+    return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2);
+  };
+
+  const printPivot = () => {
+    const el = document.getElementById('pivot-table-inner');
+    if (!el || !pivotResult) return;
+    const win = window.open('', '_blank', 'width=960,height=720');
+    if (!win) { toast.error('Popup blocked — allow popups to print'); return; }
+    const aggLabel = pivotAgg.charAt(0).toUpperCase() + pivotAgg.slice(1);
+    const valueLabel = pivotAgg === 'count' ? 'Count' : pivotValues.map((vf) => FIELD_LABELS[vf] ?? vf).join(', ');
+    const rowLabel = pivotResult.rowLabel;
+    win.document.write(`<!DOCTYPE html><html><head><title>Pivot Table</title><style>
+body{font-family:Arial,sans-serif;padding:24px;font-size:12px;color:#222}
+h2{font-size:15px;margin:0 0 4px;color:#4a3728}
+p.sub{font-size:11px;color:#888;margin:0 0 14px}
+table{border-collapse:collapse;width:100%}
+th{background:#4a3728;color:#fff;padding:6px 10px;text-align:left;font-size:11px;white-space:nowrap}
+th.num{text-align:right}
+td{border:1px solid #e0e0e0;padding:5px 10px;vertical-align:top}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:nth-child(even) td{background:#faf8f7}
+tfoot td{background:#ede7e2!important;font-weight:700}
+.total-col{border-left:2px solid #b39f92;font-weight:700}
+@media print{body{padding:0}}
+</style></head><body>
+<h2>${rowLabel} — ${aggLabel} of ${valueLabel}</h2>
+<p class="sub">Generated ${new Intl.DateTimeFormat('en-US',{dateStyle:'medium',timeStyle:'short',timeZone:'America/New_York'}).format(new Date())}</p>
+${el.outerHTML}
+<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
+</body></html>`);
+    win.document.close();
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -424,6 +637,13 @@ export default function ReportBuilder() {
                   <button onClick={() => exportXLSX(rows, orderedFields, filename + '.xlsx')} className="btn btn-secondary gap-1.5" title="Export Excel">
                     <FileSpreadsheet className="w-4 h-4" /> XLSX
                   </button>
+                  <button
+                    onClick={() => setPivotMode((m) => !m)}
+                    className={`btn gap-1.5 ${pivotMode ? 'bg-coffee-700 text-white border-coffee-700 hover:bg-coffee-800' : 'btn-secondary'}`}
+                    title="Pivot Table"
+                  >
+                    <Grid3x3 className="w-4 h-4" /> Pivot
+                  </button>
                 </>
               )}
             </div>
@@ -435,11 +655,179 @@ export default function ReportBuilder() {
             </div>
           )}
 
+          {pivotMode && hasRun && rows.length > 0 && (
+            <div className="bg-coffee-50 border border-coffee-200 rounded-lg p-3 flex flex-wrap gap-4 items-start">
+              {/* Rows */}
+              <div>
+                <label className="label text-xs mb-1">Rows</label>
+                <div className="bg-white border border-gray-200 rounded-md max-h-32 overflow-y-auto py-1 w-40">
+                  {orderedFields.map((f) => (
+                    <label key={f} className="flex items-center gap-2 px-2.5 py-1 cursor-pointer hover:bg-gray-50 select-none">
+                      <input
+                        type="checkbox"
+                        checked={pivotRows.includes(f)}
+                        onChange={() => setPivotRows((prev) => prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f])}
+                        className="rounded flex-shrink-0"
+                      />
+                      <span className="text-xs text-gray-700 truncate">{FIELD_LABELS[f] ?? f}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Columns */}
+              <div>
+                <label className="label text-xs mb-1">Columns (optional)</label>
+                <select value={pivotCol} onChange={(e) => setPivotCol(e.target.value)} className="select py-1.5 text-sm block w-40">
+                  <option value="">None</option>
+                  {orderedFields.filter((f) => !pivotRows.includes(f)).map((f) => (
+                    <option key={f} value={f}>{FIELD_LABELS[f] ?? f}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Values */}
+              {pivotAgg !== 'count' && (
+                <div>
+                  <label className="label text-xs mb-1">Values</label>
+                  <div className="bg-white border border-gray-200 rounded-md max-h-32 overflow-y-auto py-1 w-40">
+                    {(numericFields.length > 0 ? numericFields : orderedFields).map((f) => (
+                      <label key={f} className="flex items-center gap-2 px-2.5 py-1 cursor-pointer hover:bg-gray-50 select-none">
+                        <input
+                          type="checkbox"
+                          checked={pivotValues.includes(f)}
+                          onChange={() => setPivotValues((prev) => prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f])}
+                          className="rounded flex-shrink-0"
+                        />
+                        <span className="text-xs text-gray-700 truncate">{FIELD_LABELS[f] ?? f}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Aggregation */}
+              <div>
+                <label className="label text-xs mb-1">Aggregation</label>
+                <div className="flex gap-1 flex-wrap">
+                  {(['count', 'sum', 'avg', 'min', 'max'] as const).map((a) => (
+                    <button
+                      key={a}
+                      onClick={() => setPivotAgg(a)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded border transition-all ${
+                        pivotAgg === a
+                          ? 'bg-coffee-700 text-white border-coffee-700'
+                          : 'bg-white border-gray-200 text-gray-600 hover:border-coffee-400'
+                      }`}
+                    >
+                      {a.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Subtotals */}
+              {pivotRows.length > 1 && (
+                <div>
+                  <label className="label text-xs mb-1">Subtotals</label>
+                  <div className="bg-white border border-gray-200 rounded-md py-1 w-40">
+                    {pivotRows.slice(0, -1).map((f) => (
+                      <label key={f} className="flex items-center gap-2 px-2.5 py-1 cursor-pointer hover:bg-gray-50 select-none">
+                        <input
+                          type="checkbox"
+                          checked={pivotSubtotalFields.includes(f)}
+                          onChange={() => setPivotSubtotalFields((prev) =>
+                            prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]
+                          )}
+                          className="rounded flex-shrink-0"
+                        />
+                        <span className="text-xs text-gray-700 truncate">By {FIELD_LABELS[f] ?? f}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {pivotResult && (
+                <div className="flex items-end">
+                  <button onClick={printPivot} className="btn btn-secondary btn-sm gap-1.5">
+                    <Printer className="w-4 h-4" /> Print PDF
+                  </button>
+                </div>
+              )}
+
+              {/* Pivot Filters */}
+              <div className="w-full border-t border-coffee-200 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="label text-xs mb-0">Pivot Filters</span>
+                  <button
+                    onClick={() => setPivotFilters((prev) => [...prev, { id: Date.now(), field: '', op: '=', value: '' }])}
+                    className="text-xs text-coffee-700 hover:underline font-medium"
+                  >
+                    + Add Filter
+                  </button>
+                </div>
+                {pivotFilters.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {pivotFilters.map((pf) => (
+                      <div key={pf.id} className="flex items-center gap-1.5">
+                        <select
+                          value={pf.field}
+                          onChange={(e) => setPivotFilters((prev) => prev.map((x) => x.id === pf.id ? { ...x, field: e.target.value } : x))}
+                          className="select py-1 text-xs flex-1 min-w-0"
+                        >
+                          <option value="">Field…</option>
+                          {orderedFields.map((f) => <option key={f} value={f}>{FIELD_LABELS[f] ?? f}</option>)}
+                        </select>
+                        <select
+                          value={pf.op}
+                          onChange={(e) => setPivotFilters((prev) => prev.map((x) => x.id === pf.id ? { ...x, op: e.target.value } : x))}
+                          className="select py-1 text-xs w-28"
+                        >
+                          <option value="=">= equals</option>
+                          <option value="!=">≠ not equal</option>
+                          <option value="contains">contains</option>
+                          <option value="starts">starts with</option>
+                          <option value=">">{'> greater'}</option>
+                          <option value="<">{'< less'}</option>
+                          <option value=">=">{'>= ≥'}</option>
+                          <option value="<=">{'<= ≤'}</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={pf.value}
+                          onChange={(e) => setPivotFilters((prev) => prev.map((x) => x.id === pf.id ? { ...x, value: e.target.value } : x))}
+                          placeholder="Value… (comma-separate for multiple)"
+                          className="input py-1 text-xs flex-1 min-w-0"
+                        />
+                        <button
+                          onClick={() => setPivotFilters((prev) => prev.filter((x) => x.id !== pf.id))}
+                          className="text-gray-400 hover:text-red-500 transition-colors p-0.5 flex-shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Results Table */}
           <div className="flex-1 bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <p className="text-sm font-semibold text-gray-700">
-                {hasRun ? (
+                {pivotMode && pivotResult ? (
+                  <>
+                    Pivot: <span className="text-coffee-700">{pivotResult.rowLabel}</span>
+                    {pivotCol ? <> &times; <span className="text-coffee-700">{FIELD_LABELS[pivotCol] ?? pivotCol}</span></> : null}
+                    {' → '}
+                    <span className="font-normal text-gray-500">
+                      {pivotAgg}{pivotAgg !== 'count' && pivotValues.length > 0 ? `(${pivotValues.map((vf) => FIELD_LABELS[vf] ?? vf).join(', ')})` : ''}
+                    </span>
+                  </>
+                ) : hasRun ? (
                   <>
                     <span className="text-coffee-700 font-bold">{rows.length.toLocaleString()}</span>
                     {' rows'}
@@ -451,10 +839,147 @@ export default function ReportBuilder() {
                   <span className="text-gray-400">Configure your report and click Run Report</span>
                 )}
               </p>
-              {hasRun && rows.length > 0 && <p className="text-xs text-gray-400">{orderedFields.length} columns</p>}
+              {pivotMode && pivotResult ? (
+                <span className="text-xs text-gray-400">{pivotResult.hierarchicalRows.length} rows × {pivotResult.colDefs.length} col{pivotResult.colDefs.length !== 1 ? 's' : ''}</span>
+              ) : hasRun && rows.length > 0 ? (
+                <p className="text-xs text-gray-400">{orderedFields.length} columns</p>
+              ) : null}
             </div>
             <div className="overflow-auto flex-1">
-              {hasRun && rows.length > 0 ? (
+              {pivotMode && pivotResult ? (
+                <table id="pivot-table-inner" className="w-full text-sm border-collapse min-w-max">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      {pivotResult.rowFields.map((f) => (
+                        <th key={f} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">
+                          {FIELD_LABELS[f] ?? f}
+                        </th>
+                      ))}
+                      {pivotResult.colDefs.map((cd) => (
+                        <th key={cd.key} className="px-3 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">
+                          {cd.label}
+                        </th>
+                      ))}
+                      {pivotResult.rowTotalDefs.map((td) => (
+                        <th key={td.vf} className="px-3 py-2 text-right text-xs font-semibold text-coffee-700 uppercase tracking-wide border-l border-gray-200 whitespace-nowrap">
+                          {td.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const result: React.ReactElement[] = [];
+                      let prev: string[] = [];
+
+                      // Subtotal level indices sorted deepest-first so we emit innermost before outer
+                      const subLevels = pivotSubtotalFields
+                        .map((sf) => pivotResult.rowFields.indexOf(sf))
+                        .filter((idx) => idx >= 0 && idx < pivotResult.rowFields.length - 1)
+                        .sort((a, b) => b - a);
+
+                      const emitSubtotals = (prevVals: string[], minLevel: number) => {
+                        for (const lvl of subLevels) {
+                          if (lvl < minLevel) continue;
+                          const prefixKey = prevVals.slice(0, lvl + 1).join('\x00');
+                          const sub = pivotResult.subtotalMap.get(`${lvl}\x00${prefixKey}`);
+                          if (!sub) continue;
+                          result.push(
+                            <tr key={`sub__${lvl}__${prefixKey}`} className="border-t border-coffee-200">
+                              {pivotResult.rowFields.map((_, idx) => (
+                                <td
+                                  key={idx}
+                                  className={`py-1.5 text-xs whitespace-nowrap ${idx === lvl ? 'font-semibold text-coffee-900' : 'text-gray-400'}`}
+                                  style={{ paddingLeft: `${12 + idx * 14}px`, paddingRight: '12px', background: '#ede8e3' }}
+                                >
+                                  {idx < lvl ? prevVals[idx] : idx === lvl ? `${prevVals[lvl]} — Total` : ''}
+                                </td>
+                              ))}
+                              {pivotResult.colDefs.map((cd) => (
+                                <td key={cd.key} className="px-3 py-1.5 text-right tabular-nums text-xs font-semibold text-coffee-900" style={{ background: '#ede8e3' }}>
+                                  {formatPivotVal(sub.cells[cd.key] ?? 0, cd.vf)}
+                                </td>
+                              ))}
+                              {pivotResult.rowTotalDefs.map((td) => (
+                                <td key={td.vf} className="px-3 py-1.5 text-right tabular-nums text-xs font-semibold text-coffee-900 border-l border-coffee-300" style={{ background: '#ede8e3' }}>
+                                  {formatPivotVal(sub.rowTotals[td.vf] ?? 0, td.vf)}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        }
+                      };
+
+                      pivotResult.hierarchicalRows.forEach((row, i) => {
+                        const firstDiff = i === 0 ? 0 : row.fieldValues.findIndex((v, idx) => v !== prev[idx]);
+                        if (i > 0 && firstDiff !== -1) emitSubtotals(prev, firstDiff);
+
+                        const showFrom = firstDiff === -1 ? row.fieldValues.length : firstDiff;
+                        const display = row.fieldValues.map((v, idx) => idx >= showFrom ? v : '');
+                        const isNewTopGroup = i > 0 && firstDiff === 0;
+                        prev = [...row.fieldValues];
+
+                        result.push(
+                          <tr
+                            key={row.fieldValues.join('\x00')}
+                            className={`hover:bg-gray-50 border-b border-gray-50 ${isNewTopGroup ? 'border-t-2 border-t-gray-300' : ''}`}
+                          >
+                            {display.map((val, idx) => (
+                              <td
+                                key={idx}
+                                className="py-2 text-gray-900 whitespace-nowrap"
+                                style={{
+                                  paddingLeft: `${12 + idx * 14}px`,
+                                  paddingRight: '12px',
+                                  fontWeight: val && idx === 0 ? 600 : val ? 500 : 400,
+                                  color: val ? undefined : 'transparent',
+                                }}
+                              >
+                                {val || '–'}
+                              </td>
+                            ))}
+                            {row.cells && pivotResult.colDefs.map((cd) => (
+                              <td key={cd.key} className="px-3 py-2 text-right tabular-nums text-gray-700">
+                                {formatPivotVal(row.cells[cd.key] ?? 0, cd.vf)}
+                              </td>
+                            ))}
+                            {pivotResult.rowTotalDefs.map((td) => (
+                              <td key={td.vf} className="px-3 py-2 text-right tabular-nums font-semibold text-coffee-700 border-l border-gray-200">
+                                {formatPivotVal(row.rowTotals[td.vf] ?? 0, td.vf)}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      });
+
+                      // Emit subtotals after the last row
+                      if (prev.length > 0) emitSubtotals(prev, 0);
+
+                      return result;
+                    })()}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-coffee-50 border-t-2 border-coffee-200 font-semibold">
+                      <td className="px-3 py-2 text-gray-900" colSpan={pivotResult.rowFields.length}>Total</td>
+                      {pivotResult.colDefs.map((cd) => (
+                        <td key={cd.key} className="px-3 py-2 text-right tabular-nums text-coffee-800">
+                          {formatPivotVal(pivotResult.colTotals[cd.key] ?? 0, cd.vf)}
+                        </td>
+                      ))}
+                      {pivotResult.rowTotalDefs.map((td) => (
+                        <td key={td.vf} className="px-3 py-2 text-right tabular-nums text-coffee-800 border-l border-gray-200">
+                          {formatPivotVal(pivotResult.grandTotals[td.vf] ?? 0, td.vf)}
+                        </td>
+                      ))}
+                    </tr>
+                  </tfoot>
+                </table>
+              ) : pivotMode && hasRun && rows.length > 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-300 py-16">
+                  <Grid3x3 className="w-12 h-12 mb-3" />
+                  <p className="text-sm text-gray-400">Select Rows and Values above to build your pivot table</p>
+                </div>
+              ) : hasRun && rows.length > 0 ? (
                 <table className="w-full text-sm border-collapse min-w-max">
                   <thead className="sticky top-0 z-10">
                     <tr className="bg-gray-50 border-b border-gray-200">
