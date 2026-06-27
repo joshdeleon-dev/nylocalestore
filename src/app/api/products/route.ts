@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const categoryId = url.searchParams.get('category_id');
     const all = url.searchParams.get('all') === 'true';
+    const includeArchived = url.searchParams.get('include_archived') === 'true';
+    const archivedOnly = url.searchParams.get('archived_only') === 'true';
     const limit = parseInt(url.searchParams.get('limit') || '500');
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
@@ -19,6 +21,10 @@ export async function GET(request: NextRequest) {
 
     if (!all) query = query.eq('is_available', true);
     if (categoryId) query = query.eq('category_id', parseInt(categoryId));
+
+    // Archived filtering: hide archived by default; archive view passes archived_only=true
+    if (archivedOnly) query = query.eq('is_archived', true);
+    else if (!includeArchived) query = query.eq('is_archived', false);
 
     const { data, count, error } = await query;
 

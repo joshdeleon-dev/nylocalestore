@@ -3,8 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Product, Category } from '@/types';
-import { formatCurrency } from '@/utils/helpers';
-import { Plus, Pencil, Trash2, Search, Coffee, X, Upload, Star, Tag } from 'lucide-react';
+import { formatCurrency, formatDate } from '@/utils/helpers';
+import {
+  Plus, Pencil, Trash2, Search, Coffee, X, Upload, Star, Tag,
+  LayoutGrid, List, Archive, ArchiveRestore, Check, Loader2,
+} from 'lucide-react';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/SortableHeader';
 import toast from 'react-hot-toast';
 
 interface ProductForm {
@@ -66,8 +71,9 @@ async function uploadImage(file: File): Promise<string> {
 
 export default function ManagerProductsPage() {
   const [tab, setTab] = useState<'products' | 'categories'>('products');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [showArchived, setShowArchived] = useState(false);
 
-  // Products
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,21 +88,32 @@ export default function ManagerProductsPage() {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Categories
+  const [rowEdits, setRowEdits] = useState<Record<number, { price: string; stock: string }>>({});
+  const [savingRows, setSavingRows] = useState<Set<number>>(new Set());
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkArchiving, setBulkArchiving] = useState(false);
+
   const [catLoading, setCatLoading] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [catForm, setCatForm] = useState<CategoryForm>(EMPTY_CATEGORY);
   const [savingCat, setSavingCat] = useState(false);
 
-  const fetchAll = async () => {
+  const fetchAll = async (archived = showArchived) => {
     setLoading(true);
+    const archiveParam = archived ? '&archived_only=true' : '';
     const [prodsRes, { data: cats }] = await Promise.all([
-      fetch('/api/products?all=true').then((r) => r.json()),
+      fetch(`/api/products?all=true${archiveParam}`).then((r) => r.json()),
       supabase.from('categories').select('*').order('display_order'),
     ]);
-    setProducts(prodsRes.data || []);
+    const prods: Product[] = prodsRes.data || [];
+    setProducts(prods);
     setCategories(cats || []);
+    setRowEdits(
+      Object.fromEntries(prods.map((p) => [p.id, { price: String(p.base_price), stock: String(p.current_stock ?? '') }]))
+    );
+    setSelectedIds(new Set());
     setLoading(false);
   };
 
@@ -109,7 +126,74 @@ export default function ManagerProductsPage() {
 
   useEffect(() => { fetchAll(); }, []);
 
-  // Product CRUD
+  const toggleArchiveView = () => {
+    const next = !showArchived;
+    setShowArchived(next);
+    fetchAll(next);
+  };
+
+  // ─── Inline Edit ────────────────────────────────────────────────────────────
+
+  const isRowDirty = (p: Product) => {
+    const e = rowEdits[p.id];
+    if (!e) return false;
+    return e.price !== String(p.base_price) || e.stock !== String(p.current_stock ?? '');
+  };
+
+  const saveRowEdit = async (p: Product) => {
+    const edit = rowEdits[p.id];
+    if (!edit) return;
+    setSavingRows((s) => new Set([...s, p.id]));
+    try {
+      await apiCall('/api/admin/products', 'PATCH', {
+        id: p.id,
+        base_price: parseFloat(edit.price) || p.base_price,
+        stock: edit.stock,
+      });
+      toast.success(`"${p.name}" saved`);
+      fetchAll();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save');
+    } finally {
+      setSavingRows((s) => { const n = new Set(s); n.delete(p.id); return n; });
+    }
+  };
+
+  const toggleAvailable = async (p: Product) => {
+    try {
+      await apiCall('/api/admin/products', 'PATCH', { id: p.id, is_available: !p.is_available });
+      setProducts((ps) => ps.map((x) => x.id === p.id ? { ...x, is_available: !x.is_available } : x));
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update');
+    }
+  };
+
+  const archiveProduct = async (p: Product, archive: boolean) => {
+    try {
+      await apiCall('/api/admin/products', 'PATCH', { id: p.id, is_archived: archive });
+      toast.success(archive ? `"${p.name}" archived` : `"${p.name}" restored to active`);
+      fetchAll();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed');
+    }
+  };
+
+  const archiveSelected = async (archive: boolean) => {
+    if (selectedIds.size === 0) return;
+    setBulkArchiving(true);
+    try {
+      await Promise.all([...selectedIds].map((id) => apiCall('/api/admin/products', 'PATCH', { id, is_archived: archive })));
+      toast.success(`${selectedIds.size} product${selectedIds.size !== 1 ? 's' : ''} ${archive ? 'archived' : 'restored'}`);
+      fetchAll();
+    } catch (err: any) {
+      toast.error(err.message || 'Bulk action failed');
+    } finally {
+      setBulkArchiving(false);
+    }
+  };
+
+  // ─── Product CRUD ───────────────────────────────────────────────────────────
+
   const openCreateProduct = () => {
     setEditingProduct(null);
     setProductForm(EMPTY_PRODUCT);
@@ -188,24 +272,18 @@ export default function ManagerProductsPage() {
     if (!confirm(`Delete "${p.name}"?`)) return;
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/products?id=${p.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`/api/admin/products?id=${p.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      if (data.softDeleted) {
-        toast.success(`"${p.name}" has order history — marked as unavailable instead of deleted`);
-      } else {
-        toast.success('Product deleted');
-      }
+      toast.success(data.softDeleted ? `"${p.name}" marked unavailable (has order history)` : 'Product deleted');
       fetchAll();
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete product');
     }
   };
 
-  // Category CRUD
+  // ─── Category CRUD ──────────────────────────────────────────────────────────
+
   const openCreateCat = () => {
     setEditingCat(null);
     setCatForm({ ...EMPTY_CATEGORY, display_order: String(categories.length) });
@@ -214,10 +292,7 @@ export default function ManagerProductsPage() {
 
   const openEditCat = (c: Category) => {
     setEditingCat(c);
-    setCatForm({
-      name: c.name, description: c.description || '',
-      display_order: String(c.display_order), is_active: c.is_active,
-    });
+    setCatForm({ name: c.name, description: c.description || '', display_order: String(c.display_order), is_active: c.is_active });
     setShowCatModal(true);
   };
 
@@ -226,12 +301,7 @@ export default function ManagerProductsPage() {
     if (!catForm.name.trim()) { toast.error('Name is required'); return; }
     setSavingCat(true);
     try {
-      const payload = {
-        name: catForm.name.trim(),
-        description: catForm.description.trim() || null,
-        display_order: parseInt(catForm.display_order) || 0,
-        is_active: catForm.is_active,
-      };
+      const payload = { name: catForm.name.trim(), description: catForm.description.trim() || null, display_order: parseInt(catForm.display_order) || 0, is_active: catForm.is_active };
       if (editingCat) {
         await apiCall('/api/admin/categories', 'PATCH', { id: editingCat.id, ...payload });
         toast.success('Category updated');
@@ -252,10 +322,7 @@ export default function ManagerProductsPage() {
     if (!confirm(`Delete category "${c.name}"?`)) return;
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin/categories?id=${c.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`/api/admin/categories?id=${c.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success('Category deleted');
@@ -265,27 +332,69 @@ export default function ManagerProductsPage() {
     }
   };
 
+  // ─── Derived ────────────────────────────────────────────────────────────────
+
   const filteredProducts = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
     const matchesCat = catFilter === 'ALL' || p.category_id === catFilter;
     return matchesSearch && matchesCat;
   });
 
+  const { sorted: sortedProducts, sortKey: prodSortKey, sortDir: prodSortDir, requestSort: prodRequestSort } = useTableSort(filteredProducts, {
+    name:       (p) => p.name,
+    price:      (p) => p.base_price,
+    stock:      (p) => p.current_stock ?? -1,
+    category:   (p) => categories.find((c) => c.id === p.category_id)?.name ?? '',
+    available:  (p) => p.is_available ? 1 : 0,
+    created_at: (p) => p.created_at,
+  });
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <h1 className="text-2xl font-bold text-gray-900">Products</h1>
-        {tab === 'products' ? (
-          <button onClick={openCreateProduct} className="btn btn-primary gap-2">
-            <Plus className="w-4 h-4" /> Add Product
-          </button>
-        ) : (
+        {tab === 'products' && (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-gray-100 rounded-lg p-1 gap-0.5">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm text-coffee-700' : 'text-gray-500 hover:text-gray-700'}`}
+                title="Grid view"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm text-coffee-700' : 'text-gray-500 hover:text-gray-700'}`}
+                title="List view"
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+            <button
+              onClick={toggleArchiveView}
+              className={`btn btn-secondary btn-sm gap-2 ${showArchived ? 'ring-2 ring-amber-400' : ''}`}
+            >
+              {showArchived ? <><ArchiveRestore className="w-4 h-4" /> Active Products</> : <><Archive className="w-4 h-4" /> View Archive</>}
+            </button>
+            {!showArchived && (
+              <button onClick={openCreateProduct} className="btn btn-primary btn-sm gap-2">
+                <Plus className="w-4 h-4" /> Add Product
+              </button>
+            )}
+          </div>
+        )}
+        {tab === 'categories' && (
           <button onClick={openCreateCat} className="btn btn-primary gap-2">
             <Plus className="w-4 h-4" /> Add Category
           </button>
         )}
       </div>
 
+      {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 mb-6">
         {[
           { key: 'products', label: 'Products', icon: Coffee },
@@ -295,9 +404,7 @@ export default function ManagerProductsPage() {
             key={key}
             onClick={() => setTab(key as any)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-all ${
-              tab === key
-                ? 'border-coffee-700 text-coffee-800'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
+              tab === key ? 'border-coffee-700 text-coffee-800' : 'border-transparent text-gray-500 hover:text-gray-800'
             }`}
           >
             <Icon className="w-4 h-4" />
@@ -309,9 +416,16 @@ export default function ManagerProductsPage() {
         ))}
       </div>
 
-      {/* Products Tab */}
+      {/* ── Products Tab ──────────────────────────────────────────────────── */}
       {tab === 'products' && (
         <>
+          {showArchived && (
+            <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-sm text-amber-800">
+              <Archive className="w-4 h-4 flex-shrink-0" />
+              Showing archived products — hidden from the storefront but retained in all reports.
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row gap-3 mb-6">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -325,53 +439,194 @@ export default function ManagerProductsPage() {
 
           {loading ? (
             <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="skeleton h-16 rounded-xl" />)}</div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <Coffee className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>{showArchived ? 'No archived products.' : 'No products found.'}</p>
+            </div>
+          ) : viewMode === 'grid' ? (
+            /* ── Grid View ─────────────────────────────────────────────── */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredProducts.map((p) => {
+                const category = categories.find((c) => c.id === p.category_id);
+                return (
+                  <div key={p.id} className={`card group ${showArchived ? 'opacity-75' : ''}`}>
+                    <div className="h-32 bg-gradient-to-br from-coffee-100 to-coffee-200 rounded-t-xl flex items-center justify-center relative overflow-hidden">
+                      {p.image_url ? <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" /> : <Coffee className="w-10 h-10 text-coffee-300" />}
+                      {p.is_featured && (
+                        <span className="absolute top-1.5 left-1.5 bg-amber-400 text-amber-900 text-xs font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                          <Star className="w-3 h-3 fill-amber-900" /> Featured
+                        </span>
+                      )}
+                      {!p.is_available && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                          <span className="text-white text-xs font-semibold bg-black/60 px-2 py-1 rounded">Unavailable</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="card-content">
+                      <div className="flex items-start justify-between mb-1">
+                        <div>
+                          <p className="font-semibold text-gray-900">{p.name}</p>
+                          {category && <p className="text-xs text-gray-500 mt-0.5">{category.name}</p>}
+                        </div>
+                        <span className="font-bold text-coffee-700">{formatCurrency(p.base_price)}</span>
+                      </div>
+                      {p.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{p.description}</p>}
+                      <div className="flex gap-2 mt-3">
+                        {!showArchived && (
+                          <button onClick={() => openEditProduct(p)} className="btn btn-secondary btn-sm flex-1 justify-center gap-1">
+                            <Pencil className="w-3.5 h-3.5" /> Edit
+                          </button>
+                        )}
+                        <button
+                          onClick={() => archiveProduct(p, !showArchived)}
+                          className="btn btn-sm justify-center px-3 text-amber-600 hover:bg-amber-50 border border-amber-200 rounded-lg"
+                          title={showArchived ? 'Restore' : 'Archive'}
+                        >
+                          {showArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                        </button>
+                        {!showArchived && (
+                          <button onClick={() => handleDeleteProduct(p)} className="btn btn-sm justify-center px-3 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
+            /* ── List View ─────────────────────────────────────────────── */
             <div className="card">
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 px-5 py-3 bg-coffee-50 border-b border-coffee-100">
+                  <span className="text-sm font-medium text-coffee-800">{selectedIds.size} selected</span>
+                  <button
+                    onClick={() => archiveSelected(!showArchived)}
+                    disabled={bulkArchiving}
+                    className="btn btn-sm gap-1.5 text-amber-700 hover:bg-amber-100 border border-amber-300 rounded-lg"
+                  >
+                    {showArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                    {bulkArchiving ? 'Working…' : showArchived ? 'Restore Selected' : 'Archive Selected'}
+                  </button>
+                  <button onClick={() => setSelectedIds(new Set())} className="text-xs text-gray-400 hover:text-gray-600 ml-auto">Clear</button>
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      {['Product', 'Category', 'Price', 'Status', 'Actions'].map((h) => (
-                        <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                      ))}
+                      <th className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          className="rounded"
+                          checked={sortedProducts.length > 0 && sortedProducts.every((p) => selectedIds.has(p.id))}
+                          onChange={(e) => setSelectedIds(e.target.checked ? new Set(sortedProducts.map((p) => p.id)) : new Set())}
+                        />
+                      </th>
+                      <SortableHeader label="Product"   sortKey="name"       currentKey={prodSortKey} dir={prodSortDir} onSort={prodRequestSort} />
+                      <SortableHeader label="Category"  sortKey="category"   currentKey={prodSortKey} dir={prodSortDir} onSort={prodRequestSort} />
+                      <SortableHeader label="Price"     sortKey="price"      currentKey={prodSortKey} dir={prodSortDir} onSort={prodRequestSort} />
+                      <SortableHeader label="Stock"     sortKey="stock"      currentKey={prodSortKey} dir={prodSortDir} onSort={prodRequestSort} />
+                      <SortableHeader label="Available" sortKey="available"  currentKey={prodSortKey} dir={prodSortDir} onSort={prodRequestSort} />
+                      <SortableHeader label="Created"   sortKey="created_at" currentKey={prodSortKey} dir={prodSortDir} onSort={prodRequestSort} />
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredProducts.map((p) => {
-                      const cat = categories.find((c) => c.id === p.category_id);
+                    {sortedProducts.map((p) => {
+                      const category = categories.find((c) => c.id === p.category_id);
+                      const edit = rowEdits[p.id] ?? { price: String(p.base_price), stock: String(p.current_stock ?? '') };
+                      const dirty = isRowDirty(p);
+                      const saving = savingRows.has(p.id);
                       return (
-                        <tr key={p.id} className="hover:bg-gray-50">
+                        <tr key={p.id} className={`hover:bg-gray-50 ${showArchived ? 'opacity-70' : ''} ${selectedIds.has(p.id) ? 'bg-coffee-50' : ''}`}>
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              className="rounded"
+                              checked={selectedIds.has(p.id)}
+                              onChange={(e) => setSelectedIds((s) => { const n = new Set(s); e.target.checked ? n.add(p.id) : n.delete(p.id); return n; })}
+                            />
+                          </td>
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-coffee-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                {p.image_url ? (
-                                  <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  <Coffee className="w-4 h-4 text-coffee-500" />
-                                )}
+                              <div className="w-9 h-9 rounded-lg bg-coffee-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                {p.image_url ? <img src={p.image_url} alt="" className="w-full h-full object-cover" /> : <Coffee className="w-4 h-4 text-coffee-400" />}
                               </div>
                               <div>
-                                <div className="flex items-center gap-1.5">
-                                  <p className="font-medium text-gray-900">{p.name}</p>
-                                  {p.is_featured && <Star className="w-3 h-3 text-amber-500 fill-amber-400" />}
-                                </div>
-                                {p.description && <p className="text-xs text-gray-500 truncate max-w-48">{p.description}</p>}
+                                <p className="font-semibold text-gray-900">{p.name}</p>
+                                {p.is_featured && (
+                                  <span className="inline-flex items-center gap-0.5 text-xs text-amber-600 font-medium">
+                                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" /> Featured
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </td>
-                          <td className="px-5 py-3 text-gray-600">{cat?.name || '—'}</td>
-                          <td className="px-5 py-3 font-semibold text-coffee-700">{formatCurrency(p.base_price)}</td>
-                          <td className="px-5 py-3">
-                            <span className={`badge ${p.is_available ? 'badge-success' : 'badge-danger'}`}>{p.is_available ? 'Available' : 'Unavailable'}</span>
+                          <td className="px-5 py-3 text-gray-500 text-xs">{category?.name ?? '—'}</td>
+                          <td className="px-4 py-2">
+                            <div className="flex items-center gap-1">
+                              <span className="text-gray-400 text-xs">$</span>
+                              <input
+                                type="number" min="0" step="0.01"
+                                disabled={showArchived}
+                                value={edit.price}
+                                onChange={(e) => setRowEdits((r) => ({ ...r, [p.id]: { ...edit, price: e.target.value } }))}
+                                className="w-20 px-2 py-1 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-coffee-400 disabled:bg-gray-50 disabled:text-gray-400"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="number" min="0"
+                              disabled={showArchived}
+                              value={edit.stock}
+                              onChange={(e) => setRowEdits((r) => ({ ...r, [p.id]: { ...edit, stock: e.target.value } }))}
+                              placeholder="—"
+                              className="w-20 px-2 py-1 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-coffee-400 disabled:bg-gray-50 disabled:text-gray-400"
+                            />
                           </td>
                           <td className="px-5 py-3">
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => openEditProduct(p)} className="btn btn-secondary btn-sm gap-1">
-                                <Pencil className="w-3.5 h-3.5" /> Edit
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input type="checkbox" className="sr-only peer" checked={p.is_available} disabled={showArchived} onChange={() => toggleAvailable(p)} />
+                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:bg-coffee-600 peer-disabled:opacity-40 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
+                            </label>
+                          </td>
+                          <td className="px-5 py-3 text-xs text-gray-400 whitespace-nowrap">
+                            {formatDate(p.created_at.slice(0, 10))}
+                          </td>
+                          <td className="px-4 py-2">
+                            <div className="flex items-center gap-1.5">
+                              {dirty && !showArchived && (
+                                <button
+                                  onClick={() => saveRowEdit(p)}
+                                  disabled={saving}
+                                  className="btn btn-sm px-2.5 gap-1 text-green-700 hover:bg-green-50 border border-green-200 rounded-lg"
+                                  title="Save changes"
+                                >
+                                  {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                </button>
+                              )}
+                              {!showArchived && (
+                                <button onClick={() => openEditProduct(p)} className="btn btn-secondary btn-sm px-2.5" title="Edit details">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => archiveProduct(p, !showArchived)}
+                                className="btn btn-sm px-2.5 text-amber-600 hover:bg-amber-50 border border-amber-200 rounded-lg"
+                                title={showArchived ? 'Restore product' : 'Archive product'}
+                              >
+                                {showArchived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
                               </button>
-                              <button onClick={() => handleDeleteProduct(p)} className="btn btn-sm px-2.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {!showArchived && (
+                                <button onClick={() => handleDeleteProduct(p)} className="btn btn-sm px-2.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -379,19 +634,13 @@ export default function ManagerProductsPage() {
                     })}
                   </tbody>
                 </table>
-                {!loading && filteredProducts.length === 0 && (
-                  <div className="text-center py-12 text-gray-400">
-                    <Coffee className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                    <p>No products found.</p>
-                  </div>
-                )}
               </div>
             </div>
           )}
         </>
       )}
 
-      {/* Categories Tab */}
+      {/* ── Categories Tab ────────────────────────────────────────────────── */}
       {tab === 'categories' && (
         <div className="card">
           <div className="overflow-x-auto">
@@ -425,12 +674,8 @@ export default function ManagerProductsPage() {
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => openEditCat(c)} className="btn btn-secondary btn-sm gap-1">
-                          <Pencil className="w-3.5 h-3.5" /> Edit
-                        </button>
-                        <button onClick={() => handleDeleteCat(c)} className="btn btn-sm px-2.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <button onClick={() => openEditCat(c)} className="btn btn-secondary btn-sm gap-1"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                        <button onClick={() => handleDeleteCat(c)} className="btn btn-sm px-2.5 text-red-600 hover:bg-red-50 border border-red-200 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </td>
                   </tr>
@@ -447,7 +692,7 @@ export default function ManagerProductsPage() {
         </div>
       )}
 
-      {/* Product Modal */}
+      {/* ── Product Modal ─────────────────────────────────────────────────── */}
       {showProductModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowProductModal(false)} />
@@ -463,14 +708,7 @@ export default function ManagerProductsPage() {
                   className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center gap-2 cursor-pointer hover:border-coffee-400 transition-colors"
                   onClick={() => fileRef.current?.click()}
                 >
-                  {imagePreview ? (
-                    <img src={imagePreview} alt="Preview" className="h-28 w-full object-cover rounded-lg" />
-                  ) : (
-                    <>
-                      <Upload className="w-7 h-7 text-gray-300" />
-                      <p className="text-sm text-gray-400">Click to upload image</p>
-                    </>
-                  )}
+                  {imagePreview ? <img src={imagePreview} alt="Preview" className="h-28 w-full object-cover rounded-lg" /> : <><Upload className="w-7 h-7 text-gray-300" /><p className="text-sm text-gray-400">Click to upload image</p></>}
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
                 {imagePreview && (
@@ -507,11 +745,10 @@ export default function ManagerProductsPage() {
                   <input className="input" type="number" min="0" value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })} placeholder="0" />
                 </div>
                 <div>
-                  <label className="label">Order</label>
+                  <label className="label">Display Order</label>
                   <input className="input" type="number" value={productForm.display_order} onChange={(e) => setProductForm({ ...productForm, display_order: e.target.value })} />
                 </div>
               </div>
-
               <div className="flex gap-6">
                 <div className="flex items-center gap-2">
                   <input type="checkbox" id="m_available" className="checkbox" checked={productForm.is_available} onChange={(e) => setProductForm({ ...productForm, is_available: e.target.checked })} />
@@ -519,9 +756,7 @@ export default function ManagerProductsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <input type="checkbox" id="m_featured" className="checkbox" checked={productForm.is_featured} onChange={(e) => setProductForm({ ...productForm, is_featured: e.target.checked })} />
-                  <label htmlFor="m_featured" className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5 text-amber-500" /> Featured
-                  </label>
+                  <label htmlFor="m_featured" className="text-sm font-medium text-gray-700 flex items-center gap-1"><Star className="w-3.5 h-3.5 text-amber-500" /> Featured</label>
                 </div>
               </div>
               <div className="flex gap-3 pt-2">
@@ -535,7 +770,7 @@ export default function ManagerProductsPage() {
         </div>
       )}
 
-      {/* Category Modal */}
+      {/* ── Category Modal ────────────────────────────────────────────────── */}
       {showCatModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowCatModal(false)} />
@@ -547,7 +782,7 @@ export default function ManagerProductsPage() {
             <form onSubmit={handleSaveCat} className="p-6 space-y-4">
               <div>
                 <label className="label">Category Name *</label>
-                <input className="input" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} placeholder="e.g. Hot Drinks, Pastries" required />
+                <input className="input" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} required />
               </div>
               <div>
                 <label className="label">Description</label>

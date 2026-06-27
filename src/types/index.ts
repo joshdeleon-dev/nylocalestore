@@ -80,6 +80,7 @@ export interface Product {
   image_url?: string;
   is_available: boolean;
   is_featured: boolean;
+  is_archived: boolean;
   display_order: number;
   current_stock?: number | null;
   created_at: string;
