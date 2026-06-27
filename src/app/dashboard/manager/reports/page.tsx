@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { formatCurrency, formatDate } from '@/utils/helpers';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { DollarSign, ShoppingBag, TrendingUp, RefreshCw, TableProperties, X } from 'lucide-react';
+import { DollarSign, ShoppingBag, TrendingUp, RefreshCw, TableProperties, X, ChevronDown } from 'lucide-react';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
 import ReportBuilder from '@/components/ReportBuilder';
 
-type Period = 'today' | 'week' | 'month';
+const etFmt = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d);
 
 function MgrTopProductsTable({ products }: { products: { name: string; quantity: number }[] }) {
   const { sorted, sortKey, sortDir, requestSort } = useTableSort(products, {
@@ -47,45 +47,66 @@ function MgrTopProductsTable({ products }: { products: { name: string; quantity:
 
 export default function ManagerReportsPage() {
   const [tab, setTab] = useState<'analytics' | 'builder'>('analytics');
-  const [period, setPeriod] = useState<Period>('week');
+  const [dateFrom, setDateFrom] = useState(() => etFmt(new Date(Date.now() - 7 * 86400000)));
+  const [dateTo, setDateTo]     = useState(() => etFmt(new Date()));
+  const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
+  const [groupDropdownOpen, setGroupDropdownOpen] = useState(false);
+
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState({ revenue: 0, orders: 0, avg: 0, cancelled: 0 });
-  const [dailyStats, setDailyStats] = useState<{ date: string; rawDate: string; revenue: number; orders: number }[]>([]);
-  const [topProducts, setTopProducts] = useState<{ name: string; quantity: number }[]>([]);
-  const [groupStats, setGroupStats] = useState<{ group: string; revenue: number; orders: number }[]>([]);
   const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [drilldown, setDrilldown] = useState<{ title: string; orders: any[] } | null>(null);
 
-  const fetchReports = async () => {
-    setLoading(true);
-    const etFmt = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d);
-    let startDate: string;
-    if (period === 'today') startDate = etFmt(new Date());
-    else if (period === 'week') startDate = etFmt(new Date(Date.now() - 7 * 86400000));
-    else startDate = etFmt(new Date(Date.now() - 30 * 86400000));
+  const [summary, setSummary]       = useState({ revenue: 0, orders: 0, avg: 0, cancelled: 0 });
+  const [dailyStats, setDailyStats] = useState<{ date: string; rawDate: string; revenue: number; orders: number }[]>([]);
+  const [topProducts, setTopProducts] = useState<{ name: string; quantity: number }[]>([]);
+  const [groupStats, setGroupStats] = useState<{ group: string; revenue: number; orders: number }[]>([]);
 
-    const res = await fetch(`/api/orders?start_date=${startDate}&limit=1000`);
-    const json = await res.json();
-    const orders = json.data || [];
-    setRawOrders(orders);
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/orders?start_date=${dateFrom}&limit=2000&include_archived=true`);
+      const json = await res.json();
+      setRawOrders(json.data || []);
+      setDrilldown(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchOrders(); }, [dateFrom]);
+
+  const availableGroups = useMemo(() => {
+    const gs = new Set<number>();
+    rawOrders.forEach((o) => gs.add(o.group_number ?? 1));
+    return [...gs].sort((a, b) => a - b);
+  }, [rawOrders]);
+
+  const filteredOrders = useMemo(() => rawOrders.filter((o) => {
+    if (o.sales_date > dateTo) return false;
+    if (selectedGroups.size > 0 && !selectedGroups.has(o.group_number ?? 1)) return false;
+    return true;
+  }), [rawOrders, dateTo, selectedGroups]);
+
+  useEffect(() => {
     setDrilldown(null);
 
-    const completed = orders.filter((o: any) => o.status === 'COMPLETED');
-    const cancelled = orders.filter((o: any) => o.status === 'CANCELLED');
-    const revenue = completed.reduce((s: number, o: any) => s + o.total, 0);
-    setSummary({ revenue, orders: orders.length, avg: completed.length ? revenue / completed.length : 0, cancelled: cancelled.length });
+    const completed = filteredOrders.filter((o) => o.status === 'COMPLETED');
+    const cancelled = filteredOrders.filter((o) => o.status === 'CANCELLED');
+    const revenue   = completed.reduce((s: number, o: any) => s + o.total, 0);
+    setSummary({ revenue, orders: filteredOrders.length, avg: completed.length ? revenue / completed.length : 0, cancelled: cancelled.length });
 
     const byDate: Record<string, { revenue: number; orders: number }> = {};
-    orders.forEach((o: any) => {
+    filteredOrders.forEach((o) => {
       if (!byDate[o.sales_date]) byDate[o.sales_date] = { revenue: 0, orders: 0 };
       byDate[o.sales_date].orders++;
       if (o.status === 'COMPLETED') byDate[o.sales_date].revenue += o.total;
     });
-    setDailyStats(Object.entries(byDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, stats]) => ({ date: formatDate(date), rawDate: date, ...stats })));
-
+    setDailyStats(Object.entries(byDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, s]) => ({ date: formatDate(date), rawDate: date, ...s })));
 
     const pc: Record<string, number> = {};
-    orders.forEach((o: any) => {
+    filteredOrders.forEach((o) => {
       (o.items || []).forEach((i: any) => {
         const n = i.product?.name || 'Unknown';
         pc[n] = (pc[n] || 0) + i.quantity;
@@ -94,44 +115,100 @@ export default function ManagerReportsPage() {
     setTopProducts(Object.entries(pc).sort(([, a], [, b]) => b - a).slice(0, 5).map(([name, quantity]) => ({ name, quantity })));
 
     const byGroup: Record<number, { revenue: number; orders: number }> = {};
-    orders.forEach((o: any) => {
+    filteredOrders.forEach((o) => {
       const g = o.group_number ?? 1;
       if (!byGroup[g]) byGroup[g] = { revenue: 0, orders: 0 };
       byGroup[g].orders++;
       if (o.status === 'COMPLETED') byGroup[g].revenue += o.total;
     });
-    setGroupStats(
-      Object.entries(byGroup)
-        .sort(([a], [b]) => Number(a) - Number(b))
-        .map(([g, stats]) => ({ group: `Group ${g}`, ...stats }))
-    );
-    setLoading(false);
-  };
+    setGroupStats(Object.entries(byGroup).sort(([a], [b]) => Number(a) - Number(b)).map(([g, s]) => ({ group: `Group ${g}`, ...s })));
+  }, [filteredOrders]);
+
+  const toggleGroup = (g: number) => setSelectedGroups((prev) => {
+    const next = new Set(prev);
+    next.has(g) ? next.delete(g) : next.add(g);
+    return next;
+  });
 
   const handleGroupDrilldown = (data: any) => {
     const groupNum = parseInt(data.group.replace('Group ', ''), 10);
-    setDrilldown({ title: `Orders — ${data.group}`, orders: rawOrders.filter((o) => o.group_number === groupNum) });
+    setDrilldown({ title: `Orders — ${data.group}`, orders: filteredOrders.filter((o) => o.group_number === groupNum) });
   };
 
   const handleDayDrilldown = (data: any) => {
-    setDrilldown({ title: `Orders on ${data.date}`, orders: rawOrders.filter((o) => o.sales_date === data.rawDate) });
+    setDrilldown({ title: `Orders on ${data.date}`, orders: filteredOrders.filter((o) => o.sales_date === data.rawDate) });
   };
-
-  useEffect(() => { fetchReports(); }, [period]);
 
   return (
     <div className="p-6 max-w-6xl mx-auto flex flex-col" style={{ minHeight: 'calc(100vh - 48px)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
         {tab === 'analytics' && (
-          <div className="flex gap-3">
-            <select value={period} onChange={(e) => setPeriod(e.target.value as Period)} className="select">
-              <option value="today">Today</option>
-              <option value="week">Last 7 Days</option>
-              <option value="month">Last 30 Days</option>
-            </select>
-            <button onClick={fetchReports} className="btn btn-secondary btn-sm" disabled={loading}>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Date range */}
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-gray-500 font-medium">From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="input py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <label className="text-xs text-gray-500 font-medium">To</label>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom}
+                max={etFmt(new Date())}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="input py-1.5 text-sm"
+              />
+            </div>
+
+            {/* Group filter */}
+            <div className="relative">
+              <button
+                onClick={() => setGroupDropdownOpen((v) => !v)}
+                className="btn btn-secondary btn-sm gap-1.5 min-w-[120px] justify-between"
+              >
+                <span>
+                  {selectedGroups.size === 0
+                    ? 'All Groups'
+                    : `${selectedGroups.size} Group${selectedGroups.size !== 1 ? 's' : ''}`}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              {groupDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setGroupDropdownOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]">
+                    <button
+                      onClick={() => { setSelectedGroups(new Set()); setGroupDropdownOpen(false); }}
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 font-medium text-coffee-700"
+                    >
+                      All Groups
+                    </button>
+                    {availableGroups.map((g) => (
+                      <label key={g} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-gray-50 select-none">
+                        <input
+                          type="checkbox"
+                          checked={selectedGroups.has(g)}
+                          onChange={() => toggleGroup(g)}
+                          className="rounded"
+                        />
+                        <span className="text-sm text-gray-700">Group {g}</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button onClick={fetchOrders} className="btn btn-secondary btn-sm gap-2" disabled={loading}>
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
@@ -168,126 +245,140 @@ export default function ManagerReportsPage() {
 
       {/* Analytics Tab */}
       {tab === 'analytics' && <>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {[
-            { label: 'Revenue', value: formatCurrency(summary.revenue), icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50' },
-            { label: 'Orders', value: summary.orders, icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-50' },
-            { label: 'Avg Value', value: formatCurrency(summary.avg), icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
-            { label: 'Cancelled', value: summary.cancelled, icon: ShoppingBag, color: 'text-red-600', bg: 'bg-red-50' },
-          ].map((s) => {
-            const Icon = s.icon;
-            return (
-              <div key={s.label} className="card">
-                <div className="card-content">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs text-gray-500">{s.label}</p>
-                    <div className={`${s.bg} ${s.color} p-2 rounded-lg`}><Icon className="w-4 h-4" /></div>
-                  </div>
-                  <p className="text-2xl font-bold">{s.value}</p>
-                </div>
-              </div>
-            );
-          })}
+
+      {/* Active filter chips */}
+      {selectedGroups.size > 0 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-xs text-gray-500">Filtered by:</span>
+          {[...selectedGroups].sort((a, b) => a - b).map((g) => (
+            <span key={g} className="inline-flex items-center gap-1 bg-coffee-100 text-coffee-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+              Group {g}
+              <button onClick={() => toggleGroup(g)} className="hover:text-coffee-900"><X className="w-3 h-3" /></button>
+            </span>
+          ))}
+          <button onClick={() => setSelectedGroups(new Set())} className="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
         </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="card">
-            <div className="card-content border-b border-gray-100"><h2 className="font-semibold">Revenue by Group Number</h2></div>
-            <div className="card-content">
-              {groupStats.length > 0 ? (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={groupStats}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="group" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                    <Tooltip formatter={(v: number) => formatCurrency(v)} />
-                    <Bar dataKey="revenue" fill="#4a3728" radius={[4, 4, 0, 0]} onClick={handleGroupDrilldown} style={{ cursor: 'pointer' }} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
-                  No group data for this period.
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {[
+          { label: 'Revenue',    value: formatCurrency(summary.revenue),  icon: DollarSign, color: 'text-green-600',  bg: 'bg-green-50' },
+          { label: 'Orders',     value: summary.orders,                   icon: ShoppingBag, color: 'text-blue-600',   bg: 'bg-blue-50' },
+          { label: 'Avg Value',  value: formatCurrency(summary.avg),      icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-50' },
+          { label: 'Cancelled',  value: summary.cancelled,                icon: ShoppingBag, color: 'text-red-600',    bg: 'bg-red-50' },
+        ].map((s) => {
+          const Icon = s.icon;
+          return (
+            <div key={s.label} className="card">
+              <div className="card-content">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-gray-500">{s.label}</p>
+                  <div className={`${s.bg} ${s.color} p-2 rounded-lg`}><Icon className="w-4 h-4" /></div>
                 </div>
-              )}
+                <p className="text-2xl font-bold">{s.value}</p>
+              </div>
             </div>
-          </div>
+          );
+        })}
+      </div>
 
-          <div className="card">
-            <div className="card-content border-b border-gray-100"><h2 className="font-semibold">Orders by Day</h2></div>
-            <div className="card-content">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="card">
+          <div className="card-content border-b border-gray-100"><h2 className="font-semibold">Revenue by Group Number</h2></div>
+          <div className="card-content">
+            {groupStats.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={dailyStats}>
+                <BarChart data={groupStats}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="orders" fill="#6f4e37" radius={[4, 4, 0, 0]} onClick={handleDayDrilldown} style={{ cursor: 'pointer' }} />
+                  <XAxis dataKey="group" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                  <Bar dataKey="revenue" fill="#4a3728" radius={[4, 4, 0, 0]} onClick={handleGroupDrilldown} style={{ cursor: 'pointer' }} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            ) : (
+              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No group data for this period.</div>
+            )}
           </div>
         </div>
 
-        <MgrTopProductsTable products={topProducts} />
+        <div className="card">
+          <div className="card-content border-b border-gray-100"><h2 className="font-semibold">Orders by Day</h2></div>
+          <div className="card-content">
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={dailyStats}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="orders" fill="#6f4e37" radius={[4, 4, 0, 0]} onClick={handleDayDrilldown} style={{ cursor: 'pointer' }} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
 
-        {drilldown && (
-          <div className="card mt-6">
-            <div className="card-content border-b border-gray-100 flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900">{drilldown.title}</h2>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-400">{drilldown.orders.length} order{drilldown.orders.length !== 1 ? 's' : ''}</span>
-                <button onClick={() => setDrilldown(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              {drilldown.orders.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">No orders match this selection.</div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Order #</th>
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Customer</th>
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                      <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Items</th>
-                      <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {drilldown.orders.map((o) => (
-                      <tr key={o.id} className="hover:bg-gray-50">
-                        <td className="px-5 py-3 font-mono text-xs font-semibold text-coffee-700">{o.order_number}</td>
-                        <td className="px-5 py-3">
-                          <p className="font-medium text-gray-900">{o.customer_name}</p>
-                          <p className="text-xs text-gray-400">Group #{o.group_number}</p>
-                        </td>
-                        <td className="px-5 py-3 text-xs text-gray-500">{formatDate(o.sales_date)}</td>
-                        <td className="px-5 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            o.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                            o.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
-                            o.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-800' :
-                            o.status === 'READY' ? 'bg-indigo-100 text-indigo-800' :
-                            o.status === 'ACCEPTED' ? 'bg-purple-100 text-purple-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>{o.status}</span>
-                        </td>
-                        <td className="px-5 py-3 text-xs text-gray-600">
-                          {(o.items || []).slice(0, 3).map((i: any) => `${i.quantity}× ${i.product?.name || '?'}`).join(', ')}
-                          {(o.items || []).length > 3 ? ` +${(o.items || []).length - 3} more` : ''}
-                        </td>
-                        <td className="px-5 py-3 text-right font-semibold text-gray-900">{formatCurrency(o.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+      <MgrTopProductsTable products={topProducts} />
+
+      {drilldown && (
+        <div className="card mt-6">
+          <div className="card-content border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">{drilldown.title}</h2>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400">{drilldown.orders.length} order{drilldown.orders.length !== 1 ? 's' : ''}</span>
+              <button onClick={() => setDrilldown(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
-        )}
+          <div className="overflow-x-auto">
+            {drilldown.orders.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">No orders match this selection.</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Order #</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Customer</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Items</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {drilldown.orders.map((o) => (
+                    <tr key={o.id} className="hover:bg-gray-50">
+                      <td className="px-5 py-3 font-mono text-xs font-semibold text-coffee-700">{o.order_number}</td>
+                      <td className="px-5 py-3">
+                        <p className="font-medium text-gray-900">{o.customer_name}</p>
+                        <p className="text-xs text-gray-400">Group #{o.group_number}</p>
+                      </td>
+                      <td className="px-5 py-3 text-xs text-gray-500">{formatDate(o.sales_date)}</td>
+                      <td className="px-5 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          o.status === 'COMPLETED'   ? 'bg-green-100 text-green-800' :
+                          o.status === 'CANCELLED'   ? 'bg-red-100 text-red-800' :
+                          o.status === 'IN_PROGRESS' ? 'bg-yellow-100 text-yellow-800' :
+                          o.status === 'READY'       ? 'bg-indigo-100 text-indigo-800' :
+                          o.status === 'ACCEPTED'    ? 'bg-purple-100 text-purple-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>{o.status}</span>
+                      </td>
+                      <td className="px-5 py-3 text-xs text-gray-600">
+                        {(o.items || []).slice(0, 3).map((i: any) => `${i.quantity}× ${i.product?.name || '?'}`).join(', ')}
+                        {(o.items || []).length > 3 ? ` +${(o.items || []).length - 3} more` : ''}
+                      </td>
+                      <td className="px-5 py-3 text-right font-semibold text-gray-900">{formatCurrency(o.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
       </>}
     </div>
   );
