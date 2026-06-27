@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
     const status = url.searchParams.get('status');
     const statuses = url.searchParams.get('statuses');
     const startDate = url.searchParams.get('start_date');
+    const includeArchived = url.searchParams.get('include_archived') === 'true';
+    const archivedOnly = url.searchParams.get('archived_only') === 'true';
     const limit = parseInt(url.searchParams.get('limit') || '100');
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
@@ -28,6 +30,10 @@ export async function GET(request: NextRequest) {
     if (status) query = query.eq('status', status);
     else if (statuses) query = query.in('status', statuses.split(','));
     if (startDate) query = query.gte('sales_date', startDate);
+
+    // Archive filtering: hide archived by default; reports pass include_archived=true
+    if (archivedOnly) query = query.eq('is_archived', true);
+    else if (!includeArchived) query = query.eq('is_archived', false);
 
     const { data, count, error } = await query;
     if (error) throw error;
@@ -190,6 +196,43 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, deleted });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message || 'Failed to delete orders' }, { status: 500 });
+  }
+}
+
+// Bulk archive / unarchive orders
+export async function PUT(request: NextRequest) {
+  const token = request.headers.get('authorization')?.slice(7);
+  if (!token) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+  const { data: { user } } = await db.auth.getUser(token);
+  if (!user) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+  const { data: profile } = await db.from('users').select('*, role:roles(name)').eq('id', user.id).single();
+  if (!['ADMIN', 'MANAGER'].includes((profile as any)?.role?.name)) {
+    return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+  }
+  try {
+    const { ids, archive, before_date } = await request.json();
+    const isArchiving = archive !== false; // default true
+
+    let query = db.from('orders').update({ is_archived: isArchiving });
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      query = query.in('id', ids);
+    } else if (before_date) {
+      // Archive all completed/cancelled orders with sales_date before the cutoff
+      query = query
+        .in('status', ['COMPLETED', 'CANCELLED'])
+        .lt('sales_date', before_date)
+        .eq('is_archived', !isArchiving);
+    } else {
+      return NextResponse.json({ success: false, error: 'ids array or before_date required' }, { status: 400 });
+    }
+
+    const { data, error } = await query.select('id');
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, archived: isArchiving, count: data?.length ?? 0 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message || 'Failed to archive orders' }, { status: 500 });
   }
 }
 

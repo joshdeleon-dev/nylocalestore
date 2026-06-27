@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Order, OrderStatus, Product, PaymentMethod } from '@/types';
 import { formatCurrency, formatDate, formatDateTime, getOrderStatusColor, getOrderStatusLabel } from '@/utils/helpers';
-import { Search, RefreshCw, X, Trash2, AlertTriangle, Pencil, CheckSquare, Square } from 'lucide-react';
+import { Search, RefreshCw, X, Trash2, AlertTriangle, Pencil, Archive, ArchiveRestore } from 'lucide-react';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
 import { StickerPrint } from '@/components/StickerPrint';
@@ -24,6 +24,10 @@ export default function ManagerOrdersPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [showArchiveDateModal, setShowArchiveDateModal] = useState(false);
+  const [archiveBeforeDate, setArchiveBeforeDate] = useState('');
 
   // Edit order state
   const [editOrder, setEditOrder] = useState<Order | null>(null);
@@ -34,8 +38,9 @@ export default function ManagerOrdersPage() {
 
   const fetchOrders = async () => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: '100' });
+    const params = new URLSearchParams({ limit: '200' });
     if (statusFilter !== 'ALL') params.set('status', statusFilter);
+    if (showArchived) params.set('archived_only', 'true');
     const json = await fetch(`/api/orders?${params}`).then((r) => r.json());
     setOrders(json.data || []);
     setLoading(false);
@@ -44,7 +49,7 @@ export default function ManagerOrdersPage() {
   useEffect(() => {
     fetchOrders();
     fetch('/api/products?all=true').then((r) => r.json()).then((d) => setProducts(d.data || []));
-  }, [statusFilter]);
+  }, [statusFilter, showArchived]);
 
   const toEasternDatetimeLocal = (utcStr: string): string => {
     if (!utcStr) return '';
@@ -149,6 +154,53 @@ export default function ManagerOrdersPage() {
     }
   };
 
+  const archiveOrders = async (ids: number[], archive: boolean) => {
+    setArchiving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch('/api/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ ids, archive }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+      toast.success(archive ? `${ids.length} order${ids.length !== 1 ? 's' : ''} archived` : `${ids.length} order${ids.length !== 1 ? 's' : ''} unarchived`);
+      setSelectedIds(new Set());
+      setSelected(null);
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to archive orders');
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const archiveBeforeDate_ = async () => {
+    if (!archiveBeforeDate) return;
+    setArchiving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch('/api/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ before_date: archiveBeforeDate, archive: true }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+      toast.success(`${json.count} order${json.count !== 1 ? 's' : ''} archived`);
+      setShowArchiveDateModal(false);
+      setArchiveBeforeDate('');
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to archive orders');
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   const updateStatus = async (orderId: number, status: OrderStatus) => {
     try {
       const res = await fetch('/api/orders', {
@@ -204,10 +256,28 @@ export default function ManagerOrdersPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
-        <button onClick={fetchOrders} className="btn btn-secondary btn-sm gap-2" disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+          {showArchived && <p className="text-xs text-amber-600 font-medium mt-0.5">Viewing archived orders</p>}
+        </div>
+        <div className="flex gap-2 flex-wrap justify-end">
+          <button
+            onClick={() => { setShowArchived((v) => !v); setSelectedIds(new Set()); setSelected(null); }}
+            className={`btn btn-sm gap-1.5 ${showArchived ? 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200' : 'btn-secondary'}`}
+          >
+            <Archive className="w-4 h-4" />
+            {showArchived ? 'Exit Archive' : 'View Archive'}
+          </button>
+          {!showArchived && (
+            <button onClick={() => setShowArchiveDateModal(true)} className="btn btn-secondary btn-sm gap-1.5">
+              <Archive className="w-4 h-4" />
+              Archive Before…
+            </button>
+          )}
+          <button onClick={fetchOrders} className="btn btn-secondary btn-sm gap-2" disabled={loading}>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -222,20 +292,41 @@ export default function ManagerOrdersPage() {
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
-          <span className="text-sm font-medium text-red-800">
+        <div className="flex items-center gap-3 mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+          <span className="text-sm font-medium text-gray-800">
             {selectedIds.size} order{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
-          <button onClick={() => setSelectedIds(new Set())} className="text-xs text-red-500 hover:underline">
+          <button onClick={() => setSelectedIds(new Set())} className="text-xs text-gray-500 hover:underline">
             Clear
           </button>
-          <button
-            onClick={() => setConfirmBulkDelete(true)}
-            className="ml-auto btn btn-sm bg-red-600 text-white hover:bg-red-700 border-0 gap-1.5"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete {selectedIds.size} Order{selectedIds.size !== 1 ? 's' : ''}
-          </button>
+          <div className="ml-auto flex gap-2">
+            {showArchived ? (
+              <button
+                onClick={() => archiveOrders(Array.from(selectedIds), false)}
+                disabled={archiving}
+                className="btn btn-sm bg-amber-500 text-white hover:bg-amber-600 border-0 gap-1.5"
+              >
+                <ArchiveRestore className="w-3.5 h-3.5" />
+                {archiving ? 'Unarchiving…' : `Unarchive ${selectedIds.size}`}
+              </button>
+            ) : (
+              <button
+                onClick={() => archiveOrders(Array.from(selectedIds), true)}
+                disabled={archiving}
+                className="btn btn-sm bg-amber-600 text-white hover:bg-amber-700 border-0 gap-1.5"
+              >
+                <Archive className="w-3.5 h-3.5" />
+                {archiving ? 'Archiving…' : `Archive ${selectedIds.size}`}
+              </button>
+            )}
+            <button
+              onClick={() => setConfirmBulkDelete(true)}
+              className="btn btn-sm bg-red-600 text-white hover:bg-red-700 border-0 gap-1.5"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete {selectedIds.size}
+            </button>
+          </div>
         </div>
       )}
 
@@ -347,7 +438,15 @@ export default function ManagerOrdersPage() {
                 </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-4">
+              <div className="border-t border-gray-100 pt-4 space-y-2">
+                <button
+                  onClick={() => archiveOrders([selected.id], !(selected as any).is_archived)}
+                  disabled={archiving}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-700 hover:bg-amber-50 border border-amber-200 rounded-xl transition-colors"
+                >
+                  {(selected as any).is_archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                  {(selected as any).is_archived ? 'Unarchive Order' : 'Archive Order'}
+                </button>
                 {confirmDelete ? (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                     <div className="flex items-start gap-2 mb-3">
@@ -404,6 +503,39 @@ export default function ManagerOrdersPage() {
                 className="btn flex-1 justify-center bg-red-600 text-white hover:bg-red-700 border-0"
               >
                 {bulkDeleting ? 'Deleting…' : 'Yes, Delete All'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Archive Before Date Modal */}
+      {showArchiveDateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setShowArchiveDateModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h2 className="font-bold text-gray-900 mb-1">Archive Completed Orders</h2>
+            <p className="text-sm text-gray-500 mb-5">
+              All <strong>Completed</strong> and <strong>Cancelled</strong> orders with a sales date before the selected date will be archived and hidden from the Orders list. They will still appear in reports.
+            </p>
+            <div className="mb-5">
+              <label className="label">Archive orders before</label>
+              <input
+                type="date"
+                className="input"
+                value={archiveBeforeDate}
+                onChange={(e) => setArchiveBeforeDate(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowArchiveDateModal(false)} className="btn btn-secondary flex-1 justify-center">Cancel</button>
+              <button
+                onClick={archiveBeforeDate_}
+                disabled={!archiveBeforeDate || archiving}
+                className="btn flex-1 justify-center bg-amber-600 text-white hover:bg-amber-700 border-0 gap-1.5"
+              >
+                <Archive className="w-4 h-4" />
+                {archiving ? 'Archiving…' : 'Archive'}
               </button>
             </div>
           </div>
