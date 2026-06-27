@@ -186,6 +186,7 @@ export interface Order {
   tax: number;
   total: number;
   notes?: string;
+  customer_locale?: string;
   order_date: string;
   sales_date: string;
   completed_date?: string;

@@ -121,7 +121,7 @@ export default function ManagerReportsPage() {
       byGroup[g].orders++;
       if (o.status === 'COMPLETED') byGroup[g].revenue += o.total;
     });
-    setGroupStats(Object.entries(byGroup).sort(([a], [b]) => Number(a) - Number(b)).map(([g, s]) => ({ group: `Group ${g}`, ...s })));
+    setGroupStats(Object.entries(byGroup).sort(([a], [b]) => Number(a) - Number(b)).map(([g, s]) => ({ group: Number(g) === 0 ? 'Other Locale' : `Group ${g}`, ...s })));
   }, [filteredOrders]);
 
   const toggleGroup = (g: number) => setSelectedGroups((prev) => {
@@ -131,7 +131,7 @@ export default function ManagerReportsPage() {
   });
 
   const handleGroupDrilldown = (data: any) => {
-    const groupNum = parseInt(data.group.replace('Group ', ''), 10);
+    const groupNum = data.group === 'Other Locale' ? 0 : parseInt(data.group.replace('Group ', ''), 10);
     setDrilldown({ title: `Orders — ${data.group}`, orders: filteredOrders.filter((o) => o.group_number === groupNum) });
   };
 
@@ -200,7 +200,7 @@ export default function ManagerReportsPage() {
                           onChange={() => toggleGroup(g)}
                           className="rounded"
                         />
-                        <span className="text-sm text-gray-700">Group {g}</span>
+                        <span className="text-sm text-gray-700">{g === 0 ? 'Other Locale' : `Group ${g}`}</span>
                       </label>
                     ))}
                   </div>
@@ -252,7 +252,7 @@ export default function ManagerReportsPage() {
           <span className="text-xs text-gray-500">Filtered by:</span>
           {[...selectedGroups].sort((a, b) => a - b).map((g) => (
             <span key={g} className="inline-flex items-center gap-1 bg-coffee-100 text-coffee-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-              Group {g}
+              {g === 0 ? 'Other Locale' : `Group ${g}`}
               <button onClick={() => toggleGroup(g)} className="hover:text-coffee-900"><X className="w-3 h-3" /></button>
             </span>
           ))}
@@ -353,7 +353,11 @@ export default function ManagerReportsPage() {
                       <td className="px-5 py-3 font-mono text-xs font-semibold text-coffee-700">{o.order_number}</td>
                       <td className="px-5 py-3">
                         <p className="font-medium text-gray-900">{o.customer_name}</p>
-                        <p className="text-xs text-gray-400">Group #{o.group_number}</p>
+                        <p className="text-xs text-gray-400">
+                          {o.group_number === 0
+                            ? ((o as any).customer_locale || 'Other Locale')
+                            : `Group #${o.group_number}`}
+                        </p>
                       </td>
                       <td className="px-5 py-3 text-xs text-gray-500">{formatDate(o.sales_date)}</td>
                       <td className="px-5 py-3">

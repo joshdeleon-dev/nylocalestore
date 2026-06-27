@@ -91,8 +91,12 @@ export default function ConfirmationClient({ id }: { id: string }) {
               <p className="font-semibold">{order.customer_name}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Group Number</p>
-              <p className="font-semibold text-lg text-coffee-700">#{order.group_number}</p>
+              <p className="text-sm text-gray-500">{order.group_number === 0 ? 'Locale' : 'Group Number'}</p>
+              <p className="font-semibold text-lg text-coffee-700">
+                {order.group_number === 0
+                  ? ((order as any).customer_locale || 'Other Locale')
+                  : `#${order.group_number}`}
+              </p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Status</p>
@@ -163,7 +167,9 @@ export default function ConfirmationClient({ id }: { id: string }) {
           <ul className="space-y-2 text-sm text-gray-700">
             <li>✓ Your order has been sent to our team</li>
             <li>✓ We'll start preparing your order right away</li>
-            <li>✓ We'll call out group {order.group_number} when it's ready</li>
+            <li>✓ {order.group_number === 0
+              ? `We'll call out "${(order as any).customer_locale || 'Other Locale'}" when it's ready`
+              : `We'll call out group ${order.group_number} when it's ready`}</li>
             <li>✓ Keep your order number handy: <strong>{order.order_number}</strong></li>
           </ul>
         </div>

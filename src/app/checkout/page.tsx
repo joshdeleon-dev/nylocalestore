@@ -12,10 +12,12 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, subtotal, tax, total, clearCart } = useCartStore();
   const [loading, setLoading] = useState(false);
+  const [isOtherLocale, setIsOtherLocale] = useState(false);
   const [formData, setFormData] = useState({
     customer_name: '',
     customer_phone: '',
     group_number: '',
+    customer_locale: '',
     notes: '',
     payment_method: 'CASH' as const,
   });
@@ -50,8 +52,13 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!formData.group_number) {
+    if (!isOtherLocale && !formData.group_number) {
       toast.error('Please enter your group number');
+      return;
+    }
+
+    if (isOtherLocale && !formData.customer_locale.trim()) {
+      toast.error('Please enter your locale');
       return;
     }
 
@@ -69,7 +76,8 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           customer_name: formData.customer_name.trim(),
           customer_phone: formData.customer_phone.trim(),
-          group_number: parseInt(formData.group_number),
+          group_number: isOtherLocale ? 0 : parseInt(formData.group_number),
+          customer_locale: isOtherLocale ? formData.customer_locale.trim() : null,
           items: items.map(item => ({
             product_id: item.product_id,
             quantity: item.quantity,
@@ -142,20 +150,64 @@ export default function CheckoutPage() {
                 </div>
 
                 <div>
-                  <label className="label">Group Number *</label>
-                  <input
-                    type="number"
-                    name="group_number"
-                    value={formData.group_number}
-                    onChange={handleInputChange}
-                    placeholder="e.g., 12"
-                    min="1"
-                    className="input"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    We'll call this number when your order is ready
-                  </p>
+                  <label className="label">Group / Locale *</label>
+                  {/* Toggle tabs */}
+                  <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsOtherLocale(false)}
+                      className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                        !isOtherLocale
+                          ? 'bg-coffee-700 text-white'
+                          : 'bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      Group Number
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsOtherLocale(true)}
+                      className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                        isOtherLocale
+                          ? 'bg-coffee-700 text-white'
+                          : 'bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      Other Locale
+                    </button>
+                  </div>
+
+                  {!isOtherLocale ? (
+                    <>
+                      <input
+                        type="number"
+                        name="group_number"
+                        value={formData.group_number}
+                        onChange={handleInputChange}
+                        placeholder="e.g., 12"
+                        min="1"
+                        className="input"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        We'll call this number when your order is ready
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        name="customer_locale"
+                        value={formData.customer_locale}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Brooklyn, Queens…"
+                        className="input"
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Tell us where you're visiting from
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 <div>
