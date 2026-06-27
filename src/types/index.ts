@@ -81,6 +81,7 @@ export interface Product {
   is_available: boolean;
   is_featured: boolean;
   display_order: number;
+  current_stock?: number | null;
   created_at: string;
   updated_at: string;
 }

@@ -20,7 +20,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (error) throw error;
     if (!data) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
-    return NextResponse.json({ success: true, data });
+    const { data: invData } = await db
+      .from('inventory')
+      .select('current_stock')
+      .eq('product_id', id)
+      .eq('location_id', 1)
+      .single();
+
+    return NextResponse.json({ success: true, data: { ...data, current_stock: invData?.current_stock ?? null } });
   } catch (err) {
     return NextResponse.json({ success: false, error: 'Failed to fetch product' }, { status: 500 });
   }

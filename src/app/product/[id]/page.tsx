@@ -135,21 +135,28 @@ export default function ProductDetailPage() {
 
   if (!product) return null;
 
+  const soldOut = (product as any).current_stock === 0;
+
   return (
     <div className="min-h-screen bg-white">
       <CustomerNav backHref="/" backLabel="Menu" />
 
       <div className="max-w-2xl mx-auto pb-32">
         {/* Product Image */}
-        <div className="h-64 md:h-80 bg-gradient-to-br from-coffee-100 to-coffee-200 flex items-center justify-center">
+        <div className="h-64 md:h-80 bg-gradient-to-br from-coffee-100 to-coffee-200 flex items-center justify-center relative">
           {product.image_url ? (
             <img
               src={product.image_url}
               alt={product.name}
-              className="h-full w-full object-contain"
+              className={`h-full w-full object-contain ${soldOut ? 'opacity-50' : ''}`}
             />
           ) : (
-            <Coffee className="w-24 h-24 text-coffee-300" />
+            <Coffee className={`w-24 h-24 text-coffee-300 ${soldOut ? 'opacity-50' : ''}`} />
+          )}
+          {soldOut && (
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+              <span className="bg-white text-gray-900 text-sm font-bold px-5 py-2 rounded-full uppercase tracking-widest">Sold Out</span>
+            </div>
           )}
         </div>
 
@@ -242,32 +249,40 @@ export default function ProductDetailPage() {
       {/* Sticky Bottom Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg px-4 py-4 z-50">
         <div className="max-w-2xl mx-auto flex items-center gap-4">
-          {/* Quantity */}
-          <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-3 py-2">
-            <button
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-200"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-            <span className="font-bold text-lg w-5 text-center">{quantity}</span>
-            <button
-              onClick={() => setQuantity((q) => q + 1)}
-              className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-200"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
+          {soldOut ? (
+            <div className="flex-1 bg-gray-100 rounded-xl px-5 py-3 text-center">
+              <p className="text-sm font-semibold text-gray-500">This item is currently sold out</p>
+            </div>
+          ) : (
+            <>
+              {/* Quantity */}
+              <div className="flex items-center gap-3 bg-gray-100 rounded-xl px-3 py-2">
+                <button
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-200"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <span className="font-bold text-lg w-5 text-center">{quantity}</span>
+                <button
+                  onClick={() => setQuantity((q) => q + 1)}
+                  className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-200"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
 
-          {/* Add to Cart */}
-          <button
-            onClick={handleAddToCart}
-            disabled={!canAddToCart() || adding}
-            className="flex-1 btn btn-primary justify-between"
-          >
-            <span>{adding ? 'Adding…' : 'Add to Order'}</span>
-            <span className="font-bold">{formatCurrency(calculatePrice())}</span>
-          </button>
+              {/* Add to Cart */}
+              <button
+                onClick={handleAddToCart}
+                disabled={!canAddToCart() || adding}
+                className="flex-1 btn btn-primary justify-between"
+              >
+                <span>{adding ? 'Adding…' : 'Add to Order'}</span>
+                <span className="font-bold">{formatCurrency(calculatePrice())}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

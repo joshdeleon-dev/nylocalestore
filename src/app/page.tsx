@@ -112,32 +112,47 @@ export default function Home() {
                 <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-widest">Featured</h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {featuredProducts.map((product) => (
-                  <Link
-                    key={product.id}
-                    href={`/product/${product.id}`}
-                    className="group rounded-2xl overflow-hidden border border-amber-200 bg-white hover:shadow-md transition-all duration-200"
-                  >
-                    <div className="h-44 bg-coffee-50 flex items-center justify-center overflow-hidden relative">
-                      {product.image_url ? (
-                        <img src={product.image_url} alt={product.name} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                      ) : (
-                        <Coffee className="w-12 h-12 text-coffee-200" />
-                      )}
-                      <span className="absolute top-3 right-3 bg-amber-400 text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                        <Star className="w-2.5 h-2.5 fill-amber-900" /> Featured
-                      </span>
-                    </div>
-                    <div className="p-4">
-                      <h3 className="font-semibold text-gray-900 mb-1">{product.name}</h3>
-                      <p className="text-gray-500 text-sm mb-4 line-clamp-2 leading-relaxed">{product.description}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-lg font-bold text-coffee-700">${product.base_price.toFixed(2)}</span>
-                        <span className="text-xs font-medium text-coffee-600 bg-coffee-50 px-3 py-1 rounded-full">Customize →</span>
+                {featuredProducts.map((product) => {
+                  const soldOut = product.current_stock === 0;
+                  const CardEl = soldOut ? 'div' : Link;
+                  const cardProps = soldOut ? {} : { href: `/product/${product.id}` };
+                  return (
+                    <CardEl
+                      key={product.id}
+                      {...(cardProps as any)}
+                      className={`group rounded-2xl overflow-hidden border border-amber-200 bg-white transition-all duration-200 ${soldOut ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-md'}`}
+                    >
+                      <div className="h-44 bg-coffee-50 flex items-center justify-center overflow-hidden relative">
+                        {product.image_url ? (
+                          <img src={product.image_url} alt={product.name} className={`h-full w-full object-cover transition-transform duration-300 ${!soldOut && 'group-hover:scale-105'}`} />
+                        ) : (
+                          <Coffee className="w-12 h-12 text-coffee-200" />
+                        )}
+                        {soldOut ? (
+                          <span className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <span className="bg-white text-gray-900 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">Sold Out</span>
+                          </span>
+                        ) : (
+                          <span className="absolute top-3 right-3 bg-amber-400 text-amber-900 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                            <Star className="w-2.5 h-2.5 fill-amber-900" /> Featured
+                          </span>
+                        )}
                       </div>
-                    </div>
-                  </Link>
-                ))}
+                      <div className="p-4">
+                        <h3 className={`font-semibold mb-1 ${soldOut ? 'text-gray-400' : 'text-gray-900'}`}>{product.name}</h3>
+                        <p className="text-gray-500 text-sm mb-4 line-clamp-2 leading-relaxed">{product.description}</p>
+                        <div className="flex items-center justify-between">
+                          <span className={`text-lg font-bold ${soldOut ? 'text-gray-400' : 'text-coffee-700'}`}>${product.base_price.toFixed(2)}</span>
+                          {soldOut ? (
+                            <span className="text-xs font-medium text-gray-400 bg-gray-100 px-3 py-1 rounded-full">Unavailable</span>
+                          ) : (
+                            <span className="text-xs font-medium text-coffee-600 bg-coffee-50 px-3 py-1 rounded-full">Customize →</span>
+                          )}
+                        </div>
+                      </div>
+                    </CardEl>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -177,29 +192,43 @@ export default function Home() {
 
           {/* Products Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {filteredProducts.map((product) => (
-              <Link
-                key={product.id}
-                href={`/product/${product.id}`}
-                className="group rounded-2xl overflow-hidden border border-gray-100 bg-white hover:shadow-md hover:border-gray-200 transition-all duration-200"
-              >
-                <div className="h-44 bg-gray-50 flex items-center justify-center overflow-hidden">
-                  {product.image_url ? (
-                    <img src={product.image_url} alt={product.name} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  ) : (
-                    <Coffee className="w-12 h-12 text-gray-200" />
-                  )}
-                </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-gray-900 mb-1">{product.name}</h3>
-                  <p className="text-gray-500 text-sm mb-4 line-clamp-2 leading-relaxed">{product.description}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-coffee-700">${product.base_price.toFixed(2)}</span>
-                    <span className="text-xs font-medium text-coffee-600 bg-coffee-50 px-3 py-1 rounded-full">Customize →</span>
+            {filteredProducts.map((product) => {
+              const soldOut = product.current_stock === 0;
+              const CardEl = soldOut ? 'div' : Link;
+              const cardProps = soldOut ? {} : { href: `/product/${product.id}` };
+              return (
+                <CardEl
+                  key={product.id}
+                  {...(cardProps as any)}
+                  className={`group rounded-2xl overflow-hidden border bg-white transition-all duration-200 ${soldOut ? 'border-gray-100 opacity-70 cursor-not-allowed' : 'border-gray-100 hover:shadow-md hover:border-gray-200'}`}
+                >
+                  <div className="h-44 bg-gray-50 flex items-center justify-center overflow-hidden relative">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.name} className={`h-full w-full object-cover transition-transform duration-300 ${!soldOut && 'group-hover:scale-105'}`} />
+                    ) : (
+                      <Coffee className="w-12 h-12 text-gray-200" />
+                    )}
+                    {soldOut && (
+                      <span className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="bg-white text-gray-900 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">Sold Out</span>
+                      </span>
+                    )}
                   </div>
-                </div>
-              </Link>
-            ))}
+                  <div className="p-4">
+                    <h3 className={`font-semibold mb-1 ${soldOut ? 'text-gray-400' : 'text-gray-900'}`}>{product.name}</h3>
+                    <p className="text-gray-500 text-sm mb-4 line-clamp-2 leading-relaxed">{product.description}</p>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-lg font-bold ${soldOut ? 'text-gray-400' : 'text-coffee-700'}`}>${product.base_price.toFixed(2)}</span>
+                      {soldOut ? (
+                        <span className="text-xs font-medium text-gray-400 bg-gray-100 px-3 py-1 rounded-full">Unavailable</span>
+                      ) : (
+                        <span className="text-xs font-medium text-coffee-600 bg-coffee-50 px-3 py-1 rounded-full">Customize →</span>
+                      )}
+                    </div>
+                  </div>
+                </CardEl>
+              );
+            })}
           </div>
 
           {filteredProducts.length === 0 && (

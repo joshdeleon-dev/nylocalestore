@@ -24,7 +24,19 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, data, total: count });
+    // Attach current_stock from inventory (location 1, single-location mode)
+    const productIds = (data || []).map((p: any) => p.id);
+    const { data: invData } = productIds.length
+      ? await db.from('inventory').select('product_id, current_stock').eq('location_id', 1).in('product_id', productIds)
+      : { data: [] };
+    const stockMap: Record<number, number> = {};
+    (invData || []).forEach((inv: any) => { stockMap[inv.product_id] = inv.current_stock; });
+    const productsWithStock = (data || []).map((p: any) => ({
+      ...p,
+      current_stock: p.id in stockMap ? stockMap[p.id] : null,
+    }));
+
+    return NextResponse.json({ success: true, data: productsWithStock, total: count });
   } catch (error) {
     console.error('Error fetching products:', error);
     return NextResponse.json(
