@@ -3,7 +3,7 @@ import { Providers } from './providers';
 import '../styles/globals.css';
 
 export const metadata: Metadata = {
-  title: 'NY Locale Store - Coffee Ordering & Management',
+  title: 'NY Locale Official Online Store - Order Now!',
   description: 'Modern full-stack coffee shop ordering and management platform',
   icons: {
     icon: '/favicon.ico',
