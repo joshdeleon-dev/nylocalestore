@@ -37,25 +37,20 @@ function LoginForm() {
       const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      if (signInData.session) {
-        setAuthCookie(signInData.session.access_token, signInData.session.refresh_token);
-      }
+      if (!signInData.session) throw new Error('Login failed — no session returned');
+      setAuthCookie(signInData.session.access_token, signInData.session.refresh_token);
 
-      const { data: { user } } = await supabase.auth.getUser();
+      // Fetch role via the server-side profile API (uses service role key, bypasses RLS)
+      const profileRes = await fetch('/api/auth/profile', {
+        headers: { Authorization: `Bearer ${signInData.session.access_token}` },
+      });
+      const { profile } = profileRes.ok ? await profileRes.json() : {};
 
-      if (user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*, role:roles(name)')
-          .eq('id', user.id)
-          .single();
+      const role = profile?.role?.name as UserRole | undefined;
+      const destination = redirect || (role ? getDashboardForRole(role) : '/');
 
-        const role = profile?.role?.name as UserRole | undefined;
-        const destination = redirect || (role ? getDashboardForRole(role) : '/dashboard/admin');
-
-        toast.success('Welcome back!');
-        router.push(destination);
-      }
+      toast.success('Welcome back!');
+      router.push(destination);
     } catch (error: any) {
       toast.error(error.message || 'Login failed. Please check your credentials.');
     } finally {

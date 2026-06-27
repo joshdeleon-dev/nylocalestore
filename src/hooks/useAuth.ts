@@ -19,12 +19,9 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  const fetchProfile = useCallback(async (userId: string, userEmail: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return;
-
+  const fetchProfile = useCallback(async (accessToken: string, userEmail: string) => {
     const res = await fetch('/api/auth/profile', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) return;
 
@@ -44,11 +41,9 @@ export function useAuth() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          await fetchProfile(session.user.id, session.user.email!);
+          await fetchProfile(session.access_token, session.user.email!);
         }
       } finally {
         setLoading(false);
@@ -57,12 +52,10 @@ export function useAuth() {
 
     initAuth();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        await fetchProfile(session.user.id, session.user.email!);
-      } else {
+        await fetchProfile(session.access_token, session.user.email!);
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
       }
       // intentionally no setLoading(false) here — initAuth owns the loading state

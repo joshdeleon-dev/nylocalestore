@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase'; // used for auth session token only
 import { User } from '@/types';
 import { getRoleLabel, formatDateTime } from '@/utils/helpers';
-import { Plus, Search, Pencil, UserX, UserCheck, X, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Plus, Search, Pencil, UserX, UserCheck, X, Eye, EyeOff, KeyRound, Trash2 } from 'lucide-react';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
 import toast from 'react-hot-toast';
@@ -51,6 +51,8 @@ export default function AdminUsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [showNewPw, setShowNewPw] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -65,6 +67,9 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     fetchData();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) setCurrentUserId(session.user.id);
+    });
   }, []);
 
   const openEdit = (u: UserRow) => {
@@ -141,6 +146,26 @@ export default function AdminUsersPage() {
       toast.error(err.message || 'Failed to change password');
     } finally {
       setSavingPw(false);
+    }
+  };
+
+  const handleDeleteUser = async (u: UserRow) => {
+    if (!window.confirm(`Permanently delete ${u.full_name}? This cannot be undone.`)) return;
+    setDeletingId(u.id);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/admin/users?id=${u.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      toast.success(`${u.full_name} has been deleted`);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete user');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -248,6 +273,16 @@ export default function AdminUsersPage() {
                           >
                             {user.is_active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                           </button>
+                          {user.id !== currentUserId && (
+                            <button
+                              onClick={() => handleDeleteUser(user)}
+                              disabled={deletingId === user.id}
+                              className="btn btn-sm px-2 text-red-700 hover:bg-red-50 border border-red-300 rounded-lg disabled:opacity-50"
+                              title="Delete user"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
