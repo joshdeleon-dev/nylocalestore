@@ -31,9 +31,10 @@ export default function AdminOverviewPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
       const [statsJson, recentJson] = await Promise.all([
         fetch('/api/orders/stats').then((r) => r.json()),
-        fetch('/api/orders?limit=8').then((r) => r.json()),
+        fetch(`/api/orders?limit=8&start_date=${today}`).then((r) => r.json()),
       ]);
       setStats(statsJson);
       setRecentOrders(recentJson.data || []);
@@ -166,7 +167,7 @@ export default function AdminOverviewPage() {
       {/* Recent Orders */}
       <div className="card">
         <div className="card-content border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Recent Orders</h2>
+          <h2 className="font-semibold text-gray-900">Today's Orders</h2>
           <Link
             href="/dashboard/admin/orders"
             className="text-sm text-coffee-700 hover:text-coffee-800 font-medium"

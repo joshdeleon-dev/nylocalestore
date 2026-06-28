@@ -13,9 +13,10 @@ export default function ManagerOverviewPage() {
 
   const fetchData = async () => {
     setLoading(true);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
     const [statsJson, recentJson] = await Promise.all([
       fetch('/api/orders/stats').then((r) => r.json()),
-      fetch('/api/orders?limit=6').then((r) => r.json()),
+      fetch(`/api/orders?limit=6&start_date=${today}`).then((r) => r.json()),
     ]);
     setStats({
       revenue: statsJson.revenue_today ?? 0,
@@ -89,7 +90,7 @@ export default function ManagerOverviewPage() {
 
       <div className="card">
         <div className="card-content border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold">Recent Orders</h2>
+          <h2 className="font-semibold">Today's Orders</h2>
           <Link href="/dashboard/manager/orders" className="text-sm text-coffee-700 font-medium">View all →</Link>
         </div>
         <div className="overflow-x-auto">
