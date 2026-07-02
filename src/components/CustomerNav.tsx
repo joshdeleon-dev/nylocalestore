@@ -1,7 +1,7 @@
 'use client';
 
 import { useCartStore } from '@/hooks/useCart';
-import { Coffee, ShoppingCart, ArrowLeft, User } from 'lucide-react';
+import { ShoppingBag, ArrowLeft, User } from 'lucide-react';
 import Link from 'next/link';
 
 interface CustomerNavProps {
@@ -15,55 +15,45 @@ export default function CustomerNav({ wide = false, backHref, backLabel }: Custo
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <header className="sticky top-0 z-50 bg-[#8c684c] text-white shadow-lg">
-      <div className={`${wide ? 'max-w-6xl' : 'max-w-2xl'} mx-auto px-4 py-4 flex items-center justify-between`}>
-        <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-coffee-200">
+      <div className={`${wide ? 'max-w-screen-2xl' : 'max-w-2xl'} mx-auto px-5 h-14 flex items-center justify-between`}>
+
+        {/* Left */}
+        <div className="flex items-center gap-5">
           {backHref && (
-            <Link
-              href={backHref}
-              className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="font-medium">{backLabel || 'Back'}</span>
+            <Link href={backHref} className="flex items-center gap-1.5 text-coffee-500 hover:text-coffee-900 transition-colors text-sm">
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>{backLabel || 'Back'}</span>
             </Link>
           )}
-          <Link href="/" className="flex items-center gap-2">
-            <Coffee className="w-7 h-7" />
-            <span className="text-xl font-bold">NY Locale Store</span>
+          <Link href="/" className="flex items-center gap-2.5">
+            <span className="font-serif text-lg font-medium tracking-tight text-coffee-900">NY Locale</span>
           </Link>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Right */}
+        <nav className="flex items-center gap-0.5">
           <Link
             href="/#menu"
-            className="hidden sm:flex items-center gap-2 bg-white text-coffee-700 hover:bg-white/90 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+            className="hidden sm:block text-sm text-coffee-600 hover:text-coffee-900 px-3 py-1.5 rounded-md hover:bg-coffee-50 transition-colors"
           >
-            Order Now
+            Menu
           </Link>
           <Link
             href="/cart"
-            className="relative flex items-center gap-2 bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg transition-colors"
+            className="flex items-center gap-2 text-sm font-medium text-coffee-900 bg-coffee-900 hover:bg-coffee-800 text-white px-4 py-1.5 rounded-full transition-colors ml-1"
           >
-            <ShoppingCart className="w-5 h-5" />
-            {cartCount > 0 && (
-              <>
-                <span className="absolute -top-1.5 -right-1.5 bg-white text-coffee-700 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {cartCount}
-                </span>
-                <span className="text-sm font-medium hidden sm:block">
-                  {cartCount} {cartCount === 1 ? 'item' : 'items'}
-                </span>
-              </>
-            )}
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>{cartCount > 0 ? `Cart · ${cartCount}` : 'Cart'}</span>
           </Link>
           <Link
             href="/auth/login"
-            className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+            className="ml-1 p-2 text-coffee-400 hover:text-coffee-700 hover:bg-coffee-100 rounded-md transition-colors"
             title="Staff Login"
           >
-            <User className="w-5 h-5" />
+            <User className="w-4 h-4" />
           </Link>
-        </div>
+        </nav>
       </div>
     </header>
   );

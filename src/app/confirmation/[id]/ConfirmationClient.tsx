@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Order } from '@/types';
 import { formatCurrency, formatDate, getOrderStatusColor, getOrderStatusLabel } from '@/utils/helpers';
 import Link from 'next/link';
-import { CheckCircle, Copy } from 'lucide-react';
+import { CheckCircle2, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CustomerNav from '@/components/CustomerNav';
 
@@ -25,26 +25,26 @@ export default function ConfirmationClient({ id }: { id: string }) {
         setLoading(false);
       }
     };
-
     fetchOrder();
   }, [id]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600">Loading order details...</p>
+      <div className="flex items-center justify-center min-h-screen bg-coffee-50">
+        <p className="text-coffee-400 text-sm">Loading order details…</p>
       </div>
     );
   }
 
   if (!order) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">Order not found</p>
-          <Link href="/" className="btn btn-primary">
-            Back to Menu
-          </Link>
+      <div className="min-h-screen bg-coffee-50 flex flex-col">
+        <CustomerNav />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-coffee-500 text-sm mb-4">Order not found</p>
+            <Link href="/" className="btn btn-primary">Back to Menu</Link>
+          </div>
         </div>
       </div>
     );
@@ -55,131 +55,157 @@ export default function ConfirmationClient({ id }: { id: string }) {
     toast.success('Order number copied!');
   };
 
+  const isOtherLocale = order.group_number === 0;
+  const localeName = (order as any).customer_locale || 'Other Locale';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
+    <div className="min-h-screen bg-coffee-50">
       <CustomerNav />
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        {/* Success Message */}
+
+      <div className="max-w-xl mx-auto px-4 py-10">
+
+        {/* Success header */}
         <div className="text-center mb-8">
-          <div className="inline-block mb-4">
-            <CheckCircle className="w-16 h-16 text-green-600" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-coffee-900 mb-4">
+            <CheckCircle2 className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">Order Confirmed!</h1>
-          <p className="text-gray-600">Your order has been placed successfully</p>
+          <h1 className="text-2xl font-semibold text-coffee-900 mb-1">Order Confirmed</h1>
+          <p className="text-coffee-500 text-sm">Your order has been placed successfully</p>
         </div>
 
-        {/* Order Details */}
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          {/* Order Number */}
-          <div className="mb-6 pb-6 border-b border-gray-200">
-            <p className="text-sm text-gray-500 mb-2">Order Number</p>
-            <div className="flex items-center justify-between">
-              <p className="text-3xl font-bold text-coffee-700">{order.order_number}</p>
-              <button
-                onClick={copyOrderNumber}
-                className="p-2 hover:bg-gray-100 rounded transition-colors"
-              >
-                <Copy className="w-5 h-5 text-gray-600" />
-              </button>
+        {/* Order card */}
+        <div className="bg-white rounded-xl border border-coffee-100 overflow-hidden mb-4">
+
+          {/* Order number */}
+          <div className="px-6 py-5 border-b border-coffee-100 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-coffee-400 uppercase tracking-wider font-medium mb-1">Order Number</p>
+              <p className="text-3xl font-bold text-coffee-900 font-serif">{order.order_number}</p>
             </div>
+            <button
+              onClick={copyOrderNumber}
+              className="p-2.5 hover:bg-coffee-50 rounded-lg transition-colors text-coffee-400 hover:text-coffee-700"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
           </div>
 
-          {/* Key Info */}
-          <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-gray-200">
+          {/* Key info */}
+          <div className="grid grid-cols-2 gap-4 px-6 py-5 border-b border-coffee-100">
             <div>
-              <p className="text-sm text-gray-500">Name</p>
-              <p className="font-semibold">{order.customer_name}</p>
+              <p className="text-xs text-coffee-400 uppercase tracking-wider font-medium mb-1">Name</p>
+              <p className="text-coffee-900 font-medium text-sm">{order.customer_name}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">{order.group_number === 0 ? 'Locale' : 'Group Number'}</p>
-              <p className="font-semibold text-lg text-coffee-700">
-                {order.group_number === 0
-                  ? ((order as any).customer_locale || 'Other Locale')
-                  : `#${order.group_number}`}
+              <p className="text-xs text-coffee-400 uppercase tracking-wider font-medium mb-1">
+                {isOtherLocale ? 'Locale' : 'Group Number'}
+              </p>
+              <p className="text-coffee-900 font-semibold text-sm">
+                {isOtherLocale ? localeName : `#${order.group_number}`}
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Status</p>
-              <p className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getOrderStatusColor(order.status)}`}>
+              <p className="text-xs text-coffee-400 uppercase tracking-wider font-medium mb-1">Status</p>
+              <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${getOrderStatusColor(order.status)}`}>
                 {getOrderStatusLabel(order.status)}
-              </p>
+              </span>
             </div>
             <div>
-              <p className="text-sm text-gray-500">Date</p>
-              <p className="font-semibold">{formatDate((order as any).sales_date)}</p>
+              <p className="text-xs text-coffee-400 uppercase tracking-wider font-medium mb-1">Date</p>
+              <p className="text-coffee-900 font-medium text-sm">{formatDate((order as any).sales_date)}</p>
             </div>
           </div>
 
-          {/* Order Items */}
-          <div className="mb-6 pb-6 border-b border-gray-200">
-            <h3 className="font-bold text-lg mb-4">Items</h3>
+          {/* Items */}
+          <div className="px-6 py-5 border-b border-coffee-100">
+            <p className="text-xs text-coffee-400 uppercase tracking-wider font-medium mb-3">Items</p>
             <div className="space-y-3">
-              {order.items?.map(item => (
-                <div key={item.id} className="flex justify-between items-start">
+              {order.items?.map((item) => (
+                <div key={item.id} className="flex justify-between items-start gap-4">
                   <div className="flex-1">
-                    <p className="font-medium">
-                      {item.quantity}x {item.product?.name}
+                    <p className="text-coffee-900 font-medium text-sm">
+                      {item.quantity}× {item.product?.name}
                     </p>
                     {item.modifiers && item.modifiers.length > 0 && (
-                      <ul className="text-sm text-gray-600 mt-1 space-y-0.5">
+                      <ul className="text-xs text-coffee-400 mt-1 space-y-0.5">
                         {item.modifiers.map((mod, idx) => (
                           <li key={idx}>
-                            • {mod.name}
+                            {mod.name}
                             {mod.price_adjustment > 0 && ` (+${formatCurrency(mod.price_adjustment)})`}
                           </li>
                         ))}
                       </ul>
                     )}
                   </div>
-                  <span className="font-semibold">{formatCurrency(item.line_total)}</span>
+                  <span className="text-coffee-900 font-semibold text-sm flex-shrink-0">
+                    {formatCurrency(item.line_total)}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Totals */}
-          <div className="space-y-2">
-            <div className="flex justify-between text-gray-700">
+          <div className="px-6 py-5 space-y-2">
+            <div className="flex justify-between text-sm text-coffee-500">
               <span>Subtotal</span>
               <span>{formatCurrency(order.subtotal)}</span>
             </div>
-            <div className="flex justify-between text-gray-700">
+            <div className="flex justify-between text-sm text-coffee-500">
               <span>Tax</span>
               <span>{formatCurrency(order.tax)}</span>
             </div>
-            <div className="border-t border-gray-200 pt-2 flex justify-between text-lg font-bold">
+            <div className="border-t border-coffee-100 pt-2 flex justify-between font-semibold text-coffee-900">
               <span>Total</span>
-              <span className="text-coffee-700">{formatCurrency(order.total)}</span>
+              <span>{formatCurrency(order.total)}</span>
             </div>
-          </div>
 
-          {order.notes && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-sm text-gray-500">Special Instructions</p>
-              <p className="text-gray-700 italic">{order.notes}</p>
-            </div>
-          )}
+            {order.notes && (
+              <div className="border-t border-coffee-100 pt-3 mt-2">
+                <p className="text-xs text-coffee-400 uppercase tracking-wider font-medium mb-1">Special Instructions</p>
+                <p className="text-coffee-600 text-sm italic">{order.notes}</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Next Steps */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-          <h3 className="font-bold mb-2">What's Next?</h3>
-          <ul className="space-y-2 text-sm text-gray-700">
-            <li>✓ Your order has been sent to our team</li>
-            <li>✓ We'll start preparing your order right away</li>
-            <li>✓ {order.group_number === 0
-              ? `We'll call out "${(order as any).customer_locale || 'Other Locale'}" when it's ready`
-              : `We'll call out group ${order.group_number} when it's ready`}</li>
-            <li>✓ Keep your order number handy: <strong>{order.order_number}</strong></li>
+        {/* What's next */}
+        <div className="bg-coffee-900 rounded-xl p-5 mb-6 text-white">
+          <p className="text-xs font-semibold uppercase tracking-wider text-coffee-400 mb-3">What's Next</p>
+          <ul className="space-y-2 text-sm text-coffee-200">
+            <li className="flex items-start gap-2">
+              <span className="text-coffee-400 mt-0.5">✓</span>
+              Your order has been sent to our team
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-coffee-400 mt-0.5">✓</span>
+              We'll start preparing your order right away
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-coffee-400 mt-0.5">✓</span>
+              {isOtherLocale
+                ? `We'll call out "${localeName}" when it's ready`
+                : `We'll call out group ${order.group_number} when it's ready`}
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-coffee-400 mt-0.5">✓</span>
+              Keep your order number handy: <strong className="text-white ml-1">{order.order_number}</strong>
+            </li>
           </ul>
         </div>
 
         {/* Actions */}
-        <div className="grid grid-cols-2 gap-4">
-          <Link href="/" className="btn btn-secondary justify-center">
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href="/"
+            className="flex items-center justify-center border border-coffee-200 text-coffee-700 hover:bg-coffee-50 rounded-xl px-5 py-3 text-sm font-medium transition-colors"
+          >
             Browse Menu
           </Link>
-          <Link href="/" className="btn btn-primary justify-center">
+          <Link
+            href="/"
+            className="flex items-center justify-center bg-coffee-900 hover:bg-coffee-800 text-white rounded-xl px-5 py-3 text-sm font-medium transition-colors"
+          >
             Order Again
           </Link>
         </div>

@@ -24,12 +24,13 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">No items in your cart</h1>
-          <Link href="/" className="btn btn-primary mt-4">
-            Back to Menu
-          </Link>
+      <div className="min-h-screen bg-coffee-50 flex flex-col">
+        <CustomerNav backHref="/cart" backLabel="Cart" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-lg font-semibold text-coffee-900 mb-1">No items in your cart</h1>
+            <Link href="/" className="btn btn-primary mt-4">Back to Menu</Link>
+          </div>
         </div>
       </div>
     );
@@ -37,38 +38,30 @@ export default function CheckoutPage() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    // Validation
     if (!formData.customer_name.trim()) {
       toast.error('Please enter your name');
       return;
     }
-
     if (!isOtherLocale && !formData.group_number) {
       toast.error('Please enter your group number');
       return;
     }
-
     if (isOtherLocale && !formData.customer_locale.trim()) {
       toast.error('Please enter your locale');
       return;
     }
-
     if (formData.customer_phone && !validatePhoneNumber(formData.customer_phone)) {
       toast.error('Please enter a valid phone number');
       return;
     }
 
     setLoading(true);
-
     try {
       const response = await fetch('/api/orders', {
         method: 'POST',
@@ -78,7 +71,7 @@ export default function CheckoutPage() {
           customer_phone: formData.customer_phone.trim(),
           group_number: isOtherLocale ? 0 : parseInt(formData.group_number),
           customer_locale: isOtherLocale ? formData.customer_locale.trim() : null,
-          items: items.map(item => ({
+          items: items.map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
             modifiers: item.modifiers,
@@ -92,12 +85,8 @@ export default function CheckoutPage() {
       });
 
       const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to create order');
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create order');
-      }
-
-      // Success
       toast.success('Order placed successfully!');
       clearCart();
       router.push(`/confirmation/${result.data.id}`);
@@ -110,18 +99,20 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-coffee-50">
       <CustomerNav backHref="/cart" backLabel="Cart" />
-      <div className="max-w-2xl mx-auto px-4 pt-6">
-        <h1 className="text-2xl font-bold">Checkout</h1>
-      </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Order Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-bold mb-4">Customer Information</h2>
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <h1 className="text-xl font-semibold text-coffee-900 mb-6">Checkout</h1>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="bg-white rounded-xl border border-coffee-100 p-6">
+              <h2 className="text-sm font-semibold text-coffee-900 uppercase tracking-wider mb-5">
+                Customer Information
+              </h2>
 
               <div className="space-y-4">
                 <div>
@@ -151,15 +142,14 @@ export default function CheckoutPage() {
 
                 <div>
                   <label className="label">Group / Locale *</label>
-                  {/* Toggle tabs */}
-                  <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-2">
+                  <div className="flex rounded-lg border border-coffee-200 overflow-hidden mb-2">
                     <button
                       type="button"
                       onClick={() => setIsOtherLocale(false)}
-                      className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                      className={`flex-1 py-2 text-sm font-medium transition-colors ${
                         !isOtherLocale
-                          ? 'bg-coffee-700 text-white'
-                          : 'bg-white text-gray-600 hover:bg-gray-50'
+                          ? 'bg-coffee-900 text-white'
+                          : 'bg-white text-coffee-500 hover:bg-coffee-50'
                       }`}
                     >
                       Group Number
@@ -167,10 +157,10 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       onClick={() => setIsOtherLocale(true)}
-                      className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                      className={`flex-1 py-2 text-sm font-medium transition-colors ${
                         isOtherLocale
-                          ? 'bg-coffee-700 text-white'
-                          : 'bg-white text-gray-600 hover:bg-gray-50'
+                          ? 'bg-coffee-900 text-white'
+                          : 'bg-white text-coffee-500 hover:bg-coffee-50'
                       }`}
                     >
                       Other Locale
@@ -188,7 +178,7 @@ export default function CheckoutPage() {
                         min="1"
                         className="input"
                       />
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-coffee-400 mt-1.5">
                         We'll call this number when your order is ready
                       </p>
                     </>
@@ -203,7 +193,7 @@ export default function CheckoutPage() {
                         className="input"
                         required
                       />
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-coffee-400 mt-1.5">
                         Tell us where you're visiting from
                       </p>
                     </>
@@ -216,7 +206,7 @@ export default function CheckoutPage() {
                     name="notes"
                     value={formData.notes}
                     onChange={handleInputChange}
-                    placeholder="Any special requests..."
+                    placeholder="Any special requests…"
                     className="textarea"
                     rows={3}
                   />
@@ -241,36 +231,37 @@ export default function CheckoutPage() {
             <button
               type="submit"
               disabled={loading}
-              className="btn btn-primary w-full justify-center"
+              className="w-full flex items-center justify-center bg-coffee-900 hover:bg-coffee-800 disabled:opacity-50 text-white rounded-xl px-5 py-3.5 font-medium text-sm transition-colors"
             >
-              {loading ? 'Placing Order...' : 'Place Order'}
+              {loading ? 'Placing Order…' : 'Place Order'}
             </button>
           </form>
 
-          {/* Order Summary */}
+          {/* Order summary */}
           <div>
-            <div className="bg-white rounded-lg shadow-sm p-6 sticky top-4">
-              <h2 className="text-xl font-bold mb-4">Order Summary</h2>
+            <div className="bg-white rounded-xl border border-coffee-100 p-5 sticky top-20">
+              <h2 className="text-sm font-semibold text-coffee-900 uppercase tracking-wider mb-4">
+                Order Summary
+              </h2>
 
-              <div className="space-y-3 mb-4 pb-4 border-b border-gray-200">
-                {items.map(item => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <div>
-                      <p className="font-medium">
-                        {item.quantity}x {item.product_name}
+              <div className="space-y-3 mb-4 pb-4 border-b border-coffee-100">
+                {items.map((item) => (
+                  <div key={item.id} className="flex justify-between gap-3 text-sm">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-coffee-900 font-medium leading-snug">
+                        {item.quantity}× {item.product_name}
                       </p>
                       {item.modifiers.length > 0 && (
-                        <ul className="text-xs text-gray-600 mt-1 space-y-0.5">
+                        <ul className="text-xs text-coffee-400 mt-0.5 space-y-0.5">
                           {item.modifiers.map((mod, idx) => (
-                            <li key={idx}>• {mod.name}</li>
+                            <li key={idx}>{mod.name}</li>
                           ))}
                         </ul>
                       )}
                     </div>
-                    <span className="font-medium">
+                    <span className="text-coffee-900 font-medium flex-shrink-0">
                       {formatCurrency(
-                        (item.unit_price +
-                          item.modifiers.reduce((sum, m) => sum + m.price_adjustment, 0)) *
+                        (item.unit_price + item.modifiers.reduce((sum, m) => sum + m.price_adjustment, 0)) *
                           item.quantity
                       )}
                     </span>
@@ -278,22 +269,22 @@ export default function CheckoutPage() {
                 ))}
               </div>
 
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-gray-700">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm text-coffee-500">
                   <span>Subtotal</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-gray-700">
+                <div className="flex justify-between text-sm text-coffee-500">
                   <span>Tax</span>
                   <span>{formatCurrency(tax)}</span>
                 </div>
-                <div className="border-t border-gray-200 pt-2 flex justify-between text-lg font-bold">
+                <div className="border-t border-coffee-100 pt-2 flex justify-between font-semibold text-coffee-900">
                   <span>Total</span>
-                  <span className="text-coffee-700">{formatCurrency(total)}</span>
+                  <span>{formatCurrency(total)}</span>
                 </div>
               </div>
 
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-coffee-400 text-center mt-4">
                 You'll receive a confirmation with your order number
               </p>
             </div>
