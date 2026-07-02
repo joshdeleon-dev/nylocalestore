@@ -30,7 +30,7 @@ export default function CustomerNav({ wide = false, backHref, backLabel }: Custo
 
         {/* Center */}
         <Link href="/" className="absolute left-1/2 -translate-x-1/2">
-          <span className="font-serif text-2xl font-medium tracking-tight text-coffee-900 whitespace-nowrap">New York Locale Store</span>
+          <span className="font-serif text-base sm:text-2xl font-medium tracking-tight text-coffee-900 whitespace-nowrap">New York Locale Store</span>
         </Link>
 
         {/* Right */}
@@ -43,10 +43,11 @@ export default function CustomerNav({ wide = false, backHref, backLabel }: Custo
           </Link>
           <Link
             href="/cart"
-            className="flex items-center gap-2 text-sm font-medium text-coffee-900 bg-coffee-900 hover:bg-coffee-800 text-white px-4 py-1.5 rounded-full transition-colors ml-1"
+            className="flex items-center gap-2 text-sm font-medium bg-coffee-900 hover:bg-coffee-800 text-white rounded-full transition-colors ml-1 px-3 py-1.5 sm:px-4"
           >
             <ShoppingBag className="w-3.5 h-3.5" />
-            <span>{cartCount > 0 ? `Cart · ${cartCount}` : 'Cart'}</span>
+            <span className="hidden sm:inline">{cartCount > 0 ? `Cart · ${cartCount}` : 'Cart'}</span>
+            {cartCount > 0 && <span className="sm:hidden text-xs font-semibold">{cartCount}</span>}
           </Link>
           <Link
             href="/auth/login"
