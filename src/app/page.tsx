@@ -74,23 +74,16 @@ export default function Home() {
           {/* Brand tagline */}
           <div className="px-7 pt-8 pb-5 border-b border-white/10">
             <p className="font-serif italic text-white text-[1.35rem] leading-relaxed font-normal">
-              Fresh coffee,<br />for the neighborhood.
+              Made with love,<br />served with care.
             </p>
             <p className="text-coffee-500 text-xs mt-3 tracking-widest2 uppercase font-medium">
               New York · Order & Pickup
             </p>
           </div>
 
-          {/* Hero Slider */}
-          <div className="p-4">
-            <div className="rounded-xl overflow-hidden">
-              <HeroSlider slides={heroSlides} />
-            </div>
-          </div>
-
           {/* Announcements */}
           {announcements.length > 0 && (
-            <div className="px-4 pb-4 space-y-2">
+            <div className="px-4 pb-2 space-y-2">
               {announcements.map((a) => {
                 const Icon = announcementIcons[a.type] ?? announcementIcons.info;
                 return (
@@ -107,6 +100,13 @@ export default function Home() {
               })}
             </div>
           )}
+
+          {/* Hero Slider */}
+          <div className="p-4">
+            <div className="rounded-xl overflow-hidden">
+              <HeroSlider slides={heroSlides} />
+            </div>
+          </div>
 
           {/* Footer */}
           <div className="mt-auto px-7 py-5">
