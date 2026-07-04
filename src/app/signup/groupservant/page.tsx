@@ -13,12 +13,20 @@ export default function GroupLeaderSignupPage() {
     phone: '',
     group_number: '',
   });
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
+  const passwordMismatch = confirmPassword.length > 0 && form.password !== confirmPassword;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (form.password !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/signup/groupservant', {
@@ -131,6 +139,31 @@ export default function GroupLeaderSignupPage() {
                 </div>
 
                 <div>
+                  <label className="label">Confirm Password *</label>
+                  <div className="relative">
+                    <input
+                      type={showConfirm ? 'text' : 'password'}
+                      className={`input pr-10 ${passwordMismatch ? 'border-red-400 focus:border-red-500 focus:ring-red-500/30' : ''}`}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter your password"
+                      required
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {passwordMismatch && (
+                    <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+                  )}
+                </div>
+
+                <div>
                   <label className="label">Phone <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
                   <input
                     type="tel"
@@ -144,7 +177,7 @@ export default function GroupLeaderSignupPage() {
 
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || passwordMismatch}
                   className="btn btn-primary w-full justify-center mt-2"
                 >
                   {loading ? 'Creating account…' : 'Create Account'}
