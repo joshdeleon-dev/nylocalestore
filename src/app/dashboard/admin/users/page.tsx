@@ -54,11 +54,13 @@ export default function AdminUsersPage() {
   const [savingPw, setSavingPw] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData = async (includeInactive = false) => {
     setLoading(true);
+    const usersUrl = includeInactive ? '/api/users' : '/api/users?is_active=true';
     const [usersJson, rolesJson] = await Promise.all([
-      fetch('/api/users').then((r) => r.json()),
+      fetch(usersUrl).then((r) => r.json()),
       fetch('/api/roles').then((r) => r.json()),
     ]);
     setUsers(usersJson.data || []);
@@ -67,7 +69,7 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(showInactive);
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user?.id) setCurrentUserId(session.user.id);
     });
@@ -120,7 +122,7 @@ export default function AdminUsersPage() {
         toast.success('User created — they can now log in with their email and password');
       }
       setShowModal(false);
-      fetchData();
+      fetchData(showInactive);
     } catch (err: any) {
       toast.error(err.message || 'Failed to save user');
     } finally {
@@ -132,7 +134,7 @@ export default function AdminUsersPage() {
     try {
       await apiCall('/api/admin/users', 'PATCH', { id: u.id, is_active: !u.is_active });
       toast.success(u.is_active ? 'User deactivated' : 'User activated');
-      fetchData();
+      fetchData(showInactive);
     } catch {
       toast.error('Failed to update user');
     }
@@ -167,7 +169,7 @@ export default function AdminUsersPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Delete failed');
       toast.success(`${u.full_name} has been deleted`);
-      fetchData();
+      fetchData(showInactive);
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete user');
     } finally {
@@ -202,7 +204,21 @@ export default function AdminUsersPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+          <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={showInactive}
+              onChange={(e) => {
+                setShowInactive(e.target.checked);
+                fetchData(e.target.checked);
+              }}
+            />
+            Show inactive
+          </label>
+        </div>
         <button onClick={openCreate} className="btn btn-primary gap-2">
           <Plus className="w-4 h-4" />
           Add User

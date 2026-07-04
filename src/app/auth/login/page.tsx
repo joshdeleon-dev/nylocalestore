@@ -47,6 +47,11 @@ function LoginForm() {
       });
       const { profile } = profileRes.ok ? await profileRes.json() : {};
 
+      if (profile?.is_active === false) {
+        await supabase.auth.signOut();
+        throw new Error('Account is deactivated, please reach out to admin.');
+      }
+
       const role = profile?.role?.name as UserRole | undefined;
       const destination = redirect || (role ? getDashboardForRole(role) : '/');
 
