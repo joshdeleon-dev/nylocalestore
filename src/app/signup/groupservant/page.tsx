@@ -21,7 +21,7 @@ export default function GroupLeaderSignupPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch('/api/signup/group-leader', {
+      const res = await fetch('/api/signup/groupservant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -44,7 +44,7 @@ export default function GroupLeaderSignupPage() {
             <Coffee className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white">NY Locale Store</h1>
-          <p className="text-coffee-300 mt-1">Group Leader Portal</p>
+          <p className="text-coffee-300 mt-1">Group Servant Portal</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8">
