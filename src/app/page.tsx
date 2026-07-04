@@ -22,20 +22,23 @@ export default function Home() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [orderingActive, setOrderingActive] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [{ data: categoriesData }, prodsRes, { data: slidesData }, announcementsRes] = await Promise.all([
+        const [{ data: categoriesData }, prodsRes, { data: slidesData }, announcementsRes, settingsRes] = await Promise.all([
           supabase.from('categories').select('*').eq('is_active', true).order('display_order'),
           fetch('/api/products').then((r) => r.json()),
           supabase.from('hero_slides').select('*').eq('is_active', true).order('display_order'),
           fetch('/api/announcements').then((r) => r.json()),
+          fetch('/api/settings').then((r) => r.json()),
         ]);
         setCategories(categoriesData || []);
         setProducts(prodsRes.data || []);
         setHeroSlides(slidesData || []);
         setAnnouncements(announcementsRes.data || []);
+        if (settingsRes.data) setOrderingActive(settingsRes.data.ordering_status ?? true);
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -64,7 +67,19 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-coffee-50">
-      <CustomerNav wide />
+      <div className="sticky top-0 z-50">
+        {!orderingActive && (
+          <div className="bg-amber-400 border-b border-amber-500">
+            <div className="flex items-center justify-center gap-2 px-4 py-2.5">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-900" />
+              <span className="text-sm font-semibold text-amber-900">
+                Ordering is currently paused — we'll be back soon!
+              </span>
+            </div>
+          </div>
+        )}
+        <CustomerNav wide sticky={false} />
+      </div>
 
       <div className="lg:grid lg:grid-cols-[380px_1fr]">
 
@@ -117,8 +132,8 @@ export default function Home() {
         {/* ── Right: menu ── */}
         <main className="bg-white min-h-screen" id="menu">
 
-          {/* Category tabs — sticky below nav */}
-          <div className="sticky top-14 z-10 bg-white border-b border-coffee-100">
+          {/* Category tabs — sticky below nav (+ banner when ordering paused) */}
+          <div className={`sticky z-10 bg-white border-b border-coffee-100 ${orderingActive ? 'top-14' : 'top-[96px]'}`}>
             <div className="flex overflow-x-auto scrollbar-none px-6">
               <button
                 onClick={() => setSelectedCategory(null)}
@@ -157,15 +172,16 @@ export default function Home() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {featuredProducts.map((product) => {
                     const soldOut = product.current_stock === 0;
-                    const El = soldOut ? 'div' : Link;
-                    const props = soldOut ? {} : { href: `/product/${product.id}` };
+                    const disabled = soldOut || !orderingActive;
+                    const El = disabled ? 'div' : Link;
+                    const props = disabled ? {} : { href: `/product/${product.id}` };
                     return (
                       <El
                         key={product.id}
                         {...(props as any)}
                         className={`group block rounded-xl overflow-hidden border border-coffee-100 bg-white transition-all duration-300 ${
-                          soldOut
-                            ? 'opacity-60 cursor-default'
+                          disabled
+                            ? 'opacity-50 cursor-default'
                             : 'hover:border-coffee-200 hover:shadow-[0_4px_20px_rgba(23,13,5,0.08)] cursor-pointer'
                         }`}
                       >
@@ -174,7 +190,7 @@ export default function Home() {
                             <img
                               src={product.image_url}
                               alt={product.name}
-                              className={`w-full h-full object-cover transition-transform duration-700 ${!soldOut && 'group-hover:scale-105'}`}
+                              className={`w-full h-full object-cover transition-transform duration-700 ${!disabled && 'group-hover:scale-105'}`}
                             />
                           ) : (
                             <div className="h-full flex items-center justify-center">
@@ -185,6 +201,12 @@ export default function Home() {
                             <div className="absolute inset-0 bg-coffee-900/50 flex items-center justify-center">
                               <span className="bg-white text-coffee-900 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
                                 Sold Out
+                              </span>
+                            </div>
+                          ) : !orderingActive ? (
+                            <div className="absolute inset-0 bg-coffee-900/40 flex items-center justify-center">
+                              <span className="bg-white text-coffee-900 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
+                                Unavailable
                               </span>
                             </div>
                           ) : (
@@ -200,7 +222,7 @@ export default function Home() {
                           )}
                           <div className="flex items-baseline justify-between mt-3">
                             <span className="text-coffee-900 font-semibold">${product.base_price.toFixed(2)}</span>
-                            {!soldOut && <span className="text-coffee-400 text-xs">Customize →</span>}
+                            {!disabled && <span className="text-coffee-400 text-xs">Customize →</span>}
                           </div>
                         </div>
                       </El>
@@ -221,15 +243,16 @@ export default function Home() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {filteredProducts.map((product) => {
                     const soldOut = product.current_stock === 0;
-                    const El = soldOut ? 'div' : Link;
-                    const props = soldOut ? {} : { href: `/product/${product.id}` };
+                    const disabled = soldOut || !orderingActive;
+                    const El = disabled ? 'div' : Link;
+                    const props = disabled ? {} : { href: `/product/${product.id}` };
                     return (
                       <El
                         key={product.id}
                         {...(props as any)}
                         className={`group block rounded-xl overflow-hidden border border-coffee-100 bg-white transition-all duration-300 ${
-                          soldOut
-                            ? 'opacity-60 cursor-default'
+                          disabled
+                            ? 'opacity-50 cursor-default'
                             : 'hover:border-coffee-200 hover:shadow-[0_4px_20px_rgba(23,13,5,0.08)] cursor-pointer'
                         }`}
                       >
@@ -238,17 +261,17 @@ export default function Home() {
                             <img
                               src={product.image_url}
                               alt={product.name}
-                              className={`w-full h-full object-cover transition-transform duration-700 ${!soldOut && 'group-hover:scale-105'}`}
+                              className={`w-full h-full object-cover transition-transform duration-700 ${!disabled && 'group-hover:scale-105'}`}
                             />
                           ) : (
                             <div className="h-full flex items-center justify-center">
                               <Coffee className="w-10 h-10 text-coffee-200" />
                             </div>
                           )}
-                          {soldOut && (
+                          {(soldOut || !orderingActive) && (
                             <div className="absolute inset-0 bg-coffee-900/50 flex items-center justify-center">
                               <span className="bg-white text-coffee-900 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
-                                Sold Out
+                                {soldOut ? 'Sold Out' : 'Unavailable'}
                               </span>
                             </div>
                           )}
@@ -260,7 +283,7 @@ export default function Home() {
                           )}
                           <div className="flex items-baseline justify-between mt-3">
                             <span className="text-coffee-900 font-semibold">${product.base_price.toFixed(2)}</span>
-                            {!soldOut && <span className="text-coffee-400 text-xs">Order →</span>}
+                            {!disabled && <span className="text-coffee-400 text-xs">Order →</span>}
                           </div>
                         </div>
                       </El>

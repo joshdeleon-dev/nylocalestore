@@ -8,14 +8,15 @@ interface CustomerNavProps {
   wide?: boolean;
   backHref?: string;
   backLabel?: string;
+  sticky?: boolean;
 }
 
-export default function CustomerNav({ wide = false, backHref, backLabel }: CustomerNavProps) {
+export default function CustomerNav({ wide = false, backHref, backLabel, sticky = true }: CustomerNavProps) {
   const { items } = useCartStore();
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-coffee-200">
+    <header className={`${sticky ? 'sticky top-0 z-50' : ''} bg-white/95 backdrop-blur-md border-b border-coffee-200`}>
       <div className={`${wide ? 'max-w-screen-2xl' : 'max-w-2xl'} mx-auto px-5 h-14 flex items-center justify-between relative`}>
 
         {/* Left */}

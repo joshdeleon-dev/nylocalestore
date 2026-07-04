@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Product, ModifierGroup, Modifier } from '@/types';
 import { useCartStore } from '@/hooks/useCart';
 import { formatCurrency } from '@/utils/helpers';
-import { Coffee, Plus, Minus, Check } from 'lucide-react';
+import { Coffee, Plus, Minus, Check, AlertTriangle } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import CustomerNav from '@/components/CustomerNav';
 import toast from 'react-hot-toast';
@@ -24,12 +24,18 @@ export default function ProductDetailPage() {
   const [selectedModifiers, setSelectedModifiers] = useState<Record<number, number[]>>({});
   const [notes, setNotes] = useState('');
   const [adding, setAdding] = useState(false);
+  const [orderingActive, setOrderingActive] = useState(true);
 
   useEffect(() => {
     const fetchProduct = async () => {
       try {
-        const res = await fetch(`/api/products/${params.id}`);
+        const [res, settingsRes] = await Promise.all([
+          fetch(`/api/products/${params.id}`),
+          fetch('/api/settings'),
+        ]);
         const json = await res.json();
+        const settingsJson = await settingsRes.json();
+        if (settingsJson.data) setOrderingActive(settingsJson.data.ordering_status ?? true);
         if (!res.ok || !json.data) throw new Error(json.error || 'Not found');
 
         const data = json.data;
@@ -126,7 +132,19 @@ export default function ProductDetailPage() {
 
   return (
     <div className="min-h-screen bg-coffee-50">
-      <CustomerNav backHref="/" backLabel="Menu" />
+      <div className="sticky top-0 z-50">
+        {!orderingActive && (
+          <div className="bg-amber-400 border-b border-amber-500">
+            <div className="flex items-center justify-center gap-2 px-4 py-2.5">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-900" />
+              <span className="text-sm font-semibold text-amber-900">
+                Ordering is currently paused — we'll be back soon!
+              </span>
+            </div>
+          </div>
+        )}
+        <CustomerNav backHref="/" backLabel="Menu" sticky={false} />
+      </div>
 
       <div className="max-w-2xl mx-auto pb-32">
 
@@ -236,9 +254,11 @@ export default function ProductDetailPage() {
       {/* Sticky add-to-cart bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-coffee-100 px-4 py-4 z-50">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
-          {soldOut ? (
+          {soldOut || !orderingActive ? (
             <div className="flex-1 bg-coffee-100 rounded-xl px-5 py-3 text-center">
-              <p className="text-sm font-medium text-coffee-500">Currently sold out</p>
+              <p className="text-sm font-medium text-coffee-500">
+                {soldOut ? 'Currently sold out' : 'Ordering is currently paused'}
+              </p>
             </div>
           ) : (
             <>
