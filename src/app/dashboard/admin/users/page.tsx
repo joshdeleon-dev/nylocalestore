@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 interface UserRow extends User {
   role: { name: string };
   location?: { name: string };
+  group_number?: number;
 }
 
 interface Role {
@@ -44,7 +45,7 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
-  const [form, setForm] = useState({ full_name: '', email: '', role_id: '', password: '', phone: '' });
+  const [form, setForm] = useState({ full_name: '', email: '', role_id: '', password: '', phone: '', group_number: '' });
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [pwModal, setPwModal] = useState<UserRow | null>(null);
@@ -74,28 +75,32 @@ export default function AdminUsersPage() {
 
   const openEdit = (u: UserRow) => {
     setEditing(u);
-    setForm({ full_name: u.full_name, email: u.email, role_id: String(u.role_id), password: '', phone: u.phone || '' });
+    setForm({ full_name: u.full_name, email: u.email, role_id: String(u.role_id), password: '', phone: u.phone || '', group_number: u.group_number != null ? String(u.group_number) : '' });
     setShowPassword(false);
     setShowModal(true);
   };
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ full_name: '', email: '', role_id: '', password: '', phone: '' });
+    setForm({ full_name: '', email: '', role_id: '', password: '', phone: '', group_number: '' });
     setShowPassword(false);
     setShowModal(true);
   };
+
+  const selectedRoleName = roles.find((r) => String(r.id) === form.role_id)?.name;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
+      const groupNum = selectedRoleName === 'GROUP_LEADER' && form.group_number ? Number(form.group_number) : null;
       if (editing) {
         await apiCall('/api/admin/users', 'PATCH', {
           id: editing.id,
           full_name: form.full_name.trim(),
           role_id: Number(form.role_id),
           phone: form.phone.trim() || null,
+          group_number: groupNum,
         });
         toast.success('User updated');
       } else {
@@ -110,6 +115,7 @@ export default function AdminUsersPage() {
           password: form.password,
           role_id: Number(form.role_id),
           phone: form.phone.trim() || null,
+          group_number: groupNum,
         });
         toast.success('User created — they can now log in with their email and password');
       }
@@ -190,6 +196,7 @@ export default function AdminUsersPage() {
     BARISTA: 'bg-blue-100 text-blue-800',
     CASHIER: 'bg-green-100 text-green-800',
     CUSTOMER: 'bg-gray-100 text-gray-800',
+    GROUP_LEADER: 'bg-amber-100 text-amber-800',
   };
 
   return (
@@ -242,6 +249,9 @@ export default function AdminUsersPage() {
                         <span className={`badge ${roleColors[user.role?.name] || 'bg-gray-100 text-gray-700'}`}>
                           {user.role?.name}
                         </span>
+                        {user.role?.name === 'GROUP_LEADER' && user.group_number != null && (
+                          <p className="text-xs text-gray-400 mt-0.5">Group {user.group_number}</p>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-gray-500">{user.phone || '—'}</td>
                       <td className="px-5 py-3 text-gray-500 text-xs">{formatDateTime(user.created_at)}</td>
@@ -407,7 +417,7 @@ export default function AdminUsersPage() {
                 <select
                   className="select"
                   value={form.role_id}
-                  onChange={(e) => setForm({ ...form, role_id: e.target.value })}
+                  onChange={(e) => setForm({ ...form, role_id: e.target.value, group_number: '' })}
                   required
                 >
                   <option value="">Select role…</option>
@@ -416,6 +426,22 @@ export default function AdminUsersPage() {
                   ))}
                 </select>
               </div>
+
+              {selectedRoleName === 'GROUP_LEADER' && (
+                <div>
+                  <label className="label">Group Number *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="input"
+                    value={form.group_number}
+                    onChange={(e) => setForm({ ...form, group_number: e.target.value })}
+                    placeholder="e.g., 5"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This user will only see reports for this group.</p>
+                </div>
+              )}
 
               <div>
                 <label className="label">Phone</label>

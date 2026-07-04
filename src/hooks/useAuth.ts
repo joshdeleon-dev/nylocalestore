@@ -12,6 +12,7 @@ export interface AuthUser {
   role: UserRole;
   role_id: number;
   location_id?: number;
+  group_number?: number;
 }
 
 export function useAuth() {
@@ -34,6 +35,7 @@ export function useAuth() {
         role: profile.role?.name as UserRole,
         role_id: profile.role_id,
         location_id: profile.location_id,
+        group_number: profile.group_number ?? undefined,
       });
     }
   }, []);
@@ -77,6 +79,7 @@ export function useAuth() {
       BARISTA: '/dashboard/barista',
       CASHIER: '/dashboard/cashier',
       CUSTOMER: '/',
+      GROUP_LEADER: '/dashboard/group-leader',
     };
     return routes[role] || '/';
   };

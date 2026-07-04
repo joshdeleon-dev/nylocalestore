@@ -112,6 +112,7 @@ export const getRoleLabel = (role: UserRole): string => {
     BARISTA: 'Barista',
     CASHIER: 'Cashier',
     CUSTOMER: 'Customer',
+    GROUP_LEADER: 'Group Leader',
   };
   return labels[role] || role;
 };

@@ -70,6 +70,9 @@ const rolePermissions: Record<UserRole, PermissionString[]> = {
     'orders:view',
     'orders:create',
   ],
+  GROUP_LEADER: [
+    'reports:view',
+  ],
 };
 
 // Route access control

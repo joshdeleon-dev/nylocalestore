@@ -25,6 +25,7 @@ function LoginForm() {
       BARISTA: '/dashboard/barista',
       CASHIER: '/dashboard/cashier',
       CUSTOMER: '/',
+      GROUP_LEADER: '/dashboard/group-leader',
     };
     return routes[role] || '/';
   };

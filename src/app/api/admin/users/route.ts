@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { full_name, email, password, role_id, location_id, phone } = await req.json();
+    const { full_name, email, password, role_id, location_id, phone, group_number } = await req.json();
 
     if (!full_name || !email || !password || !role_id) {
       return NextResponse.json({ error: 'Name, email, password, and role are required' }, { status: 400 });
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
       role_id: Number(role_id),
       location_id: location_id || null,
       phone: phone?.trim() || null,
+      group_number: group_number != null ? Number(group_number) : null,
       is_active: true,
     }).select('*, role:roles(name)').single();
 

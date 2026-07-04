@@ -1,6 +1,6 @@
 // Core business logic types
 
-export type UserRole = 'ADMIN' | 'MANAGER' | 'BARISTA' | 'CASHIER' | 'CUSTOMER';
+export type UserRole = 'ADMIN' | 'MANAGER' | 'BARISTA' | 'CASHIER' | 'CUSTOMER' | 'GROUP_LEADER';
 
 export type OrderStatus = 
   | 'NEW' 
