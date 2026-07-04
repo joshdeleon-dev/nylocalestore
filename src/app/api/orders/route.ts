@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     let query = db
       .from('orders')
-      .select('*, order_items(*, order_item_modifiers(*), product:products(id, name))', { count: 'exact' })
+      .select('*, order_items(*, order_item_modifiers(*), product:products(id, name, category_id, category:categories(id, name)))', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 

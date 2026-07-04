@@ -5,13 +5,18 @@ import { formatDate } from '@/utils/helpers';
 import { Tag, Search, Printer, Download, Plus, X, CheckSquare, Square, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+interface Category {
+  id: number;
+  name: string;
+}
+
 interface OrderItem {
   id: number;
   product_id: number;
   quantity: number;
   unit_price: number;
   line_total: number;
-  product?: { name: string };
+  product?: { name: string; category_id?: number; category?: { id: number; name: string } };
   modifiers?: { name: string }[];
 }
 
@@ -71,14 +76,18 @@ function TicketPreview({ t }: { t: TicketData }) {
       {t.modifiers.length > 0 && (
         <div className="text-[8.8px] text-black truncate">{t.modifiers.map((m) => `• ${m}`).join('  ')}</div>
       )}
+      {t.notes && (
+        <div className="text-[8.8px] text-black truncate mt-0.5">
+          <span className="font-bold">Note:</span> {t.notes}
+        </div>
+      )}
       <div className="flex items-end justify-between border-t border-gray-200 pt-1 mt-auto">
-        <span className="text-[8.8px] text-black truncate flex-1">{t.notes || ''}</span>
+        <span className="text-[8px] text-gray-400 truncate flex-1">
+          {t.is_custom ? 'CUSTOM' : t.order_number}{t.sales_date ? ` · ${t.sales_date}` : ''}
+        </span>
         {t.ticket_total > 1 && (
           <span className="text-[9px] font-bold ml-2 flex-shrink-0">{t.ticket_index} of {t.ticket_total}</span>
         )}
-      </div>
-      <div className="text-[7px] text-black mt-0.5">
-        {t.is_custom ? 'CUSTOM' : t.order_number}{t.sales_date ? ` · ${t.sales_date}` : ''}
       </div>
     </div>
   );
@@ -86,10 +95,13 @@ function TicketPreview({ t }: { t: TicketData }) {
 
 export default function OrderTicketsModule() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [groupFilter, setGroupFilter] = useState('');
   const [customTickets, setCustomTickets] = useState<CustomTicketEntry[]>([]);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customForm, setCustomForm] = useState({ customer_name: '', item_name: '', notes: '', quantity: 1 });
@@ -109,14 +121,21 @@ export default function OrderTicketsModule() {
     }
   };
 
+  useEffect(() => {
+    fetch('/api/categories')
+      .then((r) => r.json())
+      .then((j) => setCategories(j.data || []))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => { fetchOrders(); }, [dateFilter]);
 
-  const filtered = orders.filter(
-    (o) =>
-      !search ||
-      o.customer_name.toLowerCase().includes(search.toLowerCase()) ||
-      o.order_number.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = orders.filter((o) => {
+    if (search && !o.customer_name.toLowerCase().includes(search.toLowerCase()) && !o.order_number.toLowerCase().includes(search.toLowerCase())) return false;
+    if (groupFilter !== '' && o.group_number !== parseInt(groupFilter)) return false;
+    if (selectedCategoryId !== null && !(o.items || []).some((i) => i.product?.category_id === selectedCategoryId)) return false;
+    return true;
+  });
 
   const toggleOrder = (id: number) =>
     setSelectedIds((prev) => {
@@ -129,9 +148,12 @@ export default function OrderTicketsModule() {
     const result: TicketData[] = [];
 
     for (const order of orders.filter((o) => selectedIds.has(o.id))) {
-      // Expand each item by its quantity → one ticket per drink
+      // Filter items by category if one is selected, then expand by quantity
+      const eligibleItems = (order.items || []).filter((item) =>
+        selectedCategoryId === null || item.product?.category_id === selectedCategoryId
+      );
       const expanded: { name: string; modifiers: string[] }[] = [];
-      for (const item of order.items || []) {
+      for (const item of eligibleItems) {
         for (let q = 0; q < item.quantity; q++) {
           expanded.push({
             name: item.product?.name || 'Unknown Item',
@@ -192,11 +214,11 @@ export default function OrderTicketsModule() {
         </div>
         <div class="item">${esc(t.item_name)}</div>
         ${t.modifiers.length ? `<div class="mods">${t.modifiers.map((m) => `• ${esc(m)}`).join('  ')}</div>` : ''}
+        ${t.notes ? `<div class="note"><span class="note-label">Note:</span> ${esc(t.notes.slice(0, 60))}</div>` : ''}
         <div class="bot">
-          <span class="notes">${t.notes ? esc(t.notes.slice(0, 55)) : ''}</span>
+          <span class="meta">${t.is_custom ? 'CUSTOM' : esc(t.order_number)}${t.sales_date ? ' · ' + t.sales_date : ''}</span>
           ${t.ticket_total > 1 ? `<span class="cnt">${t.ticket_index} of ${t.ticket_total}</span>` : ''}
         </div>
-        <div class="meta">${t.is_custom ? 'CUSTOM' : esc(t.order_number)}${t.sales_date ? ' · ' + t.sales_date : ''}</div>
       </div>`
       )
       .join('');
@@ -223,10 +245,11 @@ body { font-family: 'Courier New', monospace; background: white; color: black; }
 .grp  { font-size: 10.5pt; font-weight: bold; flex-shrink: 0; }
 .item { font-size: 9pt; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
 .mods { font-size: 7.7pt; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.note { font-size: 8pt; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.note-label { font-weight: bold; }
 .bot  { display: flex; justify-content: space-between; align-items: flex-end; border-top: 0.5px solid #bbb; padding-top: 2px; margin-top: auto; }
-.notes { font-size: 7.2pt; color: #000; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { font-size: 6pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cnt  { font-size: 8.5pt; font-weight: bold; margin-left: 6px; flex-shrink: 0; }
-.meta { font-size: 5.5pt; color: #000; margin-top: 1px; }
 @media screen { body { background: #e8e8e8; padding: 20px; } .ticket { margin: 10px auto; box-shadow: 0 1px 4px rgba(0,0,0,.2); } }
 </style></head>
 <body>${stickers}
@@ -317,6 +340,15 @@ body { font-family: 'Courier New', monospace; background: white; color: black; }
               />
             </div>
             <input
+              type="number"
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              placeholder="Group #"
+              min="1"
+              className="input w-28"
+              title="Filter by group number"
+            />
+            <input
               type="date"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
@@ -327,6 +359,36 @@ body { font-family: 'Courier New', monospace; background: white; color: black; }
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
+
+          {/* Category filter */}
+          {categories.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-xs text-gray-400 mr-1 font-medium">Print items from:</span>
+              <button
+                onClick={() => setSelectedCategoryId(null)}
+                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  selectedCategoryId === null
+                    ? 'bg-coffee-700 text-white border-coffee-700'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                All Categories
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategoryId(cat.id)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    selectedCategoryId === cat.id
+                      ? 'bg-coffee-700 text-white border-coffee-700'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Select controls */}
           <div className="flex items-center gap-3 text-sm">
@@ -406,21 +468,32 @@ body { font-family: 'Courier New', monospace; background: white; color: black; }
                             {formatDate(order.sales_date)}
                           </td>
                           <td className="px-4 py-3">
-                            {(order.items || []).map((item) => (
-                              <div key={item.id} className="text-xs leading-snug mb-0.5">
-                                <span className="font-medium">
-                                  {item.quantity}× {item.product?.name}
-                                </span>
-                                {(item.modifiers || []).length > 0 && (
-                                  <span className="text-gray-400 ml-1">
-                                    ({item.modifiers!.map((m) => m.name).join(', ')})
+                            {(order.items || []).map((item) => {
+                              const included = selectedCategoryId === null || item.product?.category_id === selectedCategoryId;
+                              return (
+                                <div key={item.id} className={`text-xs leading-snug mb-0.5 ${included ? '' : 'opacity-30'}`}>
+                                  <span className="font-medium">
+                                    {item.quantity}× {item.product?.name}
                                   </span>
-                                )}
-                              </div>
-                            ))}
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                              → {totalQty} ticket{totalQty !== 1 ? 's' : ''}
-                            </p>
+                                  {(item.modifiers || []).length > 0 && (
+                                    <span className="text-gray-400 ml-1">
+                                      ({item.modifiers!.map((m) => m.name).join(', ')})
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {(() => {
+                              const filteredQty = (order.items || [])
+                                .filter((i) => selectedCategoryId === null || i.product?.category_id === selectedCategoryId)
+                                .reduce((s, i) => s + i.quantity, 0);
+                              return (
+                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                  → {filteredQty} ticket{filteredQty !== 1 ? 's' : ''}
+                                  {selectedCategoryId !== null && filteredQty !== totalQty && ` (${totalQty} total)`}
+                                </p>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-500 max-w-[110px] truncate">
                             {order.notes || '—'}
