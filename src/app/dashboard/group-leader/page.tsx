@@ -242,6 +242,58 @@ export default function GroupLeaderReportsPage() {
         })}
       </div>
 
+      {/* Order detail table */}
+      <div className="card mb-8">
+        <div className="card-content border-b border-gray-100 flex items-center justify-between">
+          <h2 className="font-semibold text-gray-900">Order Details</h2>
+          {lineItems.length > 0 && (
+            <span className="text-xs text-gray-400">{lineItems.length} line item{lineItems.length !== 1 ? 's' : ''}</span>
+          )}
+        </div>
+        {lineItems.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 text-sm">No orders in this date range.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <SortableHeader label="Date"       sortKey="date"       currentKey={lineKey} dir={lineDir} onSort={lineSort} />
+                  <SortableHeader label="Customer"   sortKey="customer"   currentKey={lineKey} dir={lineDir} onSort={lineSort} />
+                  <SortableHeader label="Product"    sortKey="product"    currentKey={lineKey} dir={lineDir} onSort={lineSort} />
+                  <SortableHeader label="Qty"        sortKey="quantity"   currentKey={lineKey} dir={lineDir} onSort={lineSort} className="text-right" />
+                  <SortableHeader label="Unit Price" sortKey="unit_price" currentKey={lineKey} dir={lineDir} onSort={lineSort} className="text-right" />
+                  <SortableHeader label="Line Total" sortKey="line_total" currentKey={lineKey} dir={lineDir} onSort={lineSort} className="text-right" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {sortedLines.map((row, i) => (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">{formatDate(row.sales_date)}</td>
+                    <td className="px-5 py-3 font-medium text-gray-900">{row.customer_name}</td>
+                    <td className="px-5 py-3 text-gray-700">{row.product}</td>
+                    <td className="px-5 py-3 text-right text-gray-700 font-medium">{row.quantity}</td>
+                    <td className="px-5 py-3 text-right text-gray-600">{formatCurrency(row.unit_price)}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-coffee-700">{formatCurrency(row.line_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-gray-200 bg-gray-50">
+                  <td colSpan={3} className="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</td>
+                  <td className="px-5 py-3 text-right font-bold text-gray-900">
+                    {lineItems.reduce((s, r) => s + r.quantity, 0)}
+                  </td>
+                  <td className="px-5 py-3" />
+                  <td className="px-5 py-3 text-right font-bold text-coffee-700">
+                    {formatCurrency(lineItems.reduce((s, r) => s + r.line_total, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="card">
@@ -304,58 +356,6 @@ export default function GroupLeaderReportsPage() {
       </div>
 
       <TopProductsTable products={topProducts} />
-
-      {/* Order detail table */}
-      <div className="card mt-6">
-        <div className="card-content border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Order Details</h2>
-          {lineItems.length > 0 && (
-            <span className="text-xs text-gray-400">{lineItems.length} line item{lineItems.length !== 1 ? 's' : ''}</span>
-          )}
-        </div>
-        {lineItems.length === 0 ? (
-          <div className="text-center py-10 text-gray-400 text-sm">No orders in this date range.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <SortableHeader label="Date"       sortKey="date"       currentKey={lineKey} dir={lineDir} onSort={lineSort} />
-                  <SortableHeader label="Customer"   sortKey="customer"   currentKey={lineKey} dir={lineDir} onSort={lineSort} />
-                  <SortableHeader label="Product"    sortKey="product"    currentKey={lineKey} dir={lineDir} onSort={lineSort} />
-                  <SortableHeader label="Qty"        sortKey="quantity"   currentKey={lineKey} dir={lineDir} onSort={lineSort} className="text-right" />
-                  <SortableHeader label="Unit Price" sortKey="unit_price" currentKey={lineKey} dir={lineDir} onSort={lineSort} className="text-right" />
-                  <SortableHeader label="Line Total" sortKey="line_total" currentKey={lineKey} dir={lineDir} onSort={lineSort} className="text-right" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {sortedLines.map((row, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">{formatDate(row.sales_date)}</td>
-                    <td className="px-5 py-3 font-medium text-gray-900">{row.customer_name}</td>
-                    <td className="px-5 py-3 text-gray-700">{row.product}</td>
-                    <td className="px-5 py-3 text-right text-gray-700 font-medium">{row.quantity}</td>
-                    <td className="px-5 py-3 text-right text-gray-600">{formatCurrency(row.unit_price)}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-coffee-700">{formatCurrency(row.line_total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-gray-200 bg-gray-50">
-                  <td colSpan={3} className="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</td>
-                  <td className="px-5 py-3 text-right font-bold text-gray-900">
-                    {lineItems.reduce((s, r) => s + r.quantity, 0)}
-                  </td>
-                  <td className="px-5 py-3" />
-                  <td className="px-5 py-3 text-right font-bold text-coffee-700">
-                    {formatCurrency(lineItems.reduce((s, r) => s + r.line_total, 0))}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </div>
 
       {/* Drilldown */}
       {drilldown && (
