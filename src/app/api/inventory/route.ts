@@ -14,10 +14,8 @@ export async function GET(request: NextRequest) {
 
     let query = db
       .from('inventory')
-      .select('*, original_stock, product:products!inner(name, is_available, is_archived), location:locations(name)', { count: 'exact' })
-      .eq('location_id', locationId ? parseInt(locationId) : 1)
-      .eq('product.is_archived', false)
-      .eq('product.is_available', true);
+      .select('*, product:products(name, is_available, is_archived), location:locations(name)', { count: 'exact' })
+      .eq('location_id', locationId ? parseInt(locationId) : 1);
 
     if (productId) query = query.eq('product_id', parseInt(productId));
     if (lowStockOnly) query = query.lt('current_stock', 'low_stock_threshold');
