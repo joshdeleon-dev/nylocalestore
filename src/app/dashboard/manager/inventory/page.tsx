@@ -12,6 +12,7 @@ interface InventoryRow {
   product_id: number;
   location_id: number;
   current_stock: number;
+  original_stock: number | null;
   low_stock_threshold: number;
   unit_of_measure: string;
   created_at: string;
@@ -49,20 +50,12 @@ export default function ManagerInventoryPage() {
 
   useEffect(() => { fetchInventory(); }, []);
 
-  const { netAdjByProduct, originalStockByProduct } = useMemo(() => {
-    const netAdj: Record<number, number> = {};
-    const earliestLog: Record<number, LogRow> = {};
+  const netAdjByProduct = useMemo(() => {
+    const map: Record<number, number> = {};
     for (const log of logs) {
-      netAdj[log.product_id] = (netAdj[log.product_id] ?? 0) + log.quantity_change;
-      if (!earliestLog[log.product_id] || log.created_at < earliestLog[log.product_id].created_at) {
-        earliestLog[log.product_id] = log;
-      }
+      map[log.product_id] = (map[log.product_id] ?? 0) + log.quantity_change;
     }
-    const origStock: Record<number, number> = {};
-    for (const [pid, log] of Object.entries(earliestLog)) {
-      origStock[Number(pid)] = log.previous_stock;
-    }
-    return { netAdjByProduct: netAdj, originalStockByProduct: origStock };
+    return map;
   }, [logs]);
 
   const handleAdjust = async (e: React.FormEvent) => {
@@ -101,7 +94,7 @@ export default function ManagerInventoryPage() {
 
   const { sorted: displayed, sortKey, sortDir, requestSort } = useTableSort(filtered, {
     product:   (i) => i.product?.name,
-    orig:      (i) => (originalStockByProduct[i.product_id] ?? i.current_stock),
+    orig:      (i) => (i.original_stock ?? i.current_stock),
     net_adj:   (i) => (netAdjByProduct[i.product_id] ?? 0),
     stock:     (i) => i.current_stock,
     threshold: (i) => i.low_stock_threshold,
@@ -150,7 +143,7 @@ export default function ManagerInventoryPage() {
             <tbody className="divide-y divide-gray-50">
               {displayed.map((item) => {
                 const netAdj = netAdjByProduct[item.product_id] ?? 0;
-                const originalStock = originalStockByProduct[item.product_id] ?? item.current_stock;
+                const originalStock = item.original_stock ?? item.current_stock;
                 const isLow = item.current_stock <= item.low_stock_threshold;
                 const isOut = item.current_stock === 0;
                 return (

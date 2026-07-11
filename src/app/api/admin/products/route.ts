@@ -22,11 +22,13 @@ async function upsertInventory(productId: number, stock: number) {
     .single();
 
   if (existing) {
+    // Never overwrite original_stock — only current_stock changes after creation
     await db.from('inventory').update({ current_stock: stock }).eq('id', existing.id);
   } else {
     await db.from('inventory').insert({
       product_id: productId, location_id: 1,
-      current_stock: stock, low_stock_threshold: 5, unit_of_measure: 'units',
+      current_stock: stock, original_stock: stock,
+      low_stock_threshold: 5, unit_of_measure: 'units',
     });
   }
 }

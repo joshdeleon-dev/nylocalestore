@@ -831,8 +831,9 @@ export default function AdminProductsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Stock Quantity</label>
-                  <input className="input" type="number" min="0" value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })} placeholder="Leave empty if not tracked" />
+                  <label className="label">Original Quantity / Stock</label>
+                  <input className="input" type="number" min="0" value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })} placeholder="Leave empty if not tracked" disabled={!!editingProduct} title={editingProduct ? 'Original stock cannot be changed after creation' : ''} />
+                  {editingProduct && <p className="text-xs text-gray-400 mt-1">Set at creation — use Inventory to adjust current stock.</p>}
                 </div>
                 <div>
                   <label className="label">Display Order</label>
