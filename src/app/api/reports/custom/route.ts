@@ -16,7 +16,7 @@ const ET = 'America/New_York';
 
 function fmtDate(v: any) {
   if (!v) return '';
-  // Date-only strings (YYYY-MM-DD) — parse components to avoid UTC midnight shift
+  // Always format as date-only so rows group correctly when used as pivot row/column
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
     const [y, m, d] = (v as string).split('-').map(Number);
     return new Intl.DateTimeFormat('en-US', {
@@ -24,8 +24,7 @@ function fmtDate(v: any) {
     }).format(new Date(y, m - 1, d));
   }
   return new Intl.DateTimeFormat('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZone: ET,
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: ET,
   }).format(new Date(v));
 }
 
