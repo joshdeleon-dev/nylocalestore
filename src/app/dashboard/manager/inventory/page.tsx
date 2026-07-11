@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { AlertCircle, RefreshCw, X } from 'lucide-react';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
@@ -15,12 +15,18 @@ interface InventoryRow {
   low_stock_threshold: number;
   unit_of_measure: string;
   created_at: string;
-  product: { name: string };
+  product: { name: string; is_available: boolean };
   location: { name: string };
+}
+
+interface LogRow {
+  product_id: number;
+  quantity_change: number;
 }
 
 export default function ManagerInventoryPage() {
   const [inventory, setInventory] = useState<InventoryRow[]>([]);
+  const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showLowOnly, setShowLowOnly] = useState(false);
   const [adjustItem, setAdjustItem] = useState<InventoryRow | null>(null);
@@ -30,13 +36,24 @@ export default function ManagerInventoryPage() {
 
   const fetchInventory = async () => {
     setLoading(true);
-    const res = await fetch('/api/inventory?limit=500');
-    const json = await res.json();
-    setInventory(json.data || []);
+    const [invRes, logsRes] = await Promise.all([
+      fetch('/api/inventory?limit=500').then((r) => r.json()),
+      fetch('/api/inventory/logs?limit=5000').then((r) => r.json()),
+    ]);
+    setInventory(invRes.data || []);
+    setLogs(logsRes.data || []);
     setLoading(false);
   };
 
   useEffect(() => { fetchInventory(); }, []);
+
+  const netAdjByProduct = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const log of logs) {
+      map[log.product_id] = (map[log.product_id] ?? 0) + log.quantity_change;
+    }
+    return map;
+  }, [logs]);
 
   const handleAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,11 +81,18 @@ export default function ManagerInventoryPage() {
     finally { setSaving(false); }
   };
 
-  const filtered = showLowOnly ? inventory.filter((i) => i.current_stock <= i.low_stock_threshold) : inventory;
-  const lowCount = inventory.filter((i) => i.current_stock <= i.low_stock_threshold).length;
+  const filtered = useMemo(() => {
+    return inventory
+      .filter((i) => i.product?.is_available !== false)
+      .filter((i) => !showLowOnly || i.current_stock <= i.low_stock_threshold);
+  }, [inventory, showLowOnly]);
+
+  const lowCount = filtered.filter((i) => i.current_stock <= i.low_stock_threshold).length;
 
   const { sorted: displayed, sortKey, sortDir, requestSort } = useTableSort(filtered, {
     product:   (i) => i.product?.name,
+    orig:      (i) => (i.current_stock - (netAdjByProduct[i.product_id] ?? 0)),
+    net_adj:   (i) => (netAdjByProduct[i.product_id] ?? 0),
     stock:     (i) => i.current_stock,
     threshold: (i) => i.low_stock_threshold,
     status:    (i) => i.current_stock === 0 ? 0 : i.current_stock <= i.low_stock_threshold ? 1 : 2,
@@ -103,22 +127,40 @@ export default function ManagerInventoryPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                <SortableHeader label="Product"   sortKey="product"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Stock"     sortKey="stock"     currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Threshold" sortKey="threshold" currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Status"    sortKey="status"    currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Created"   sortKey="created"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Product"        sortKey="product"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Original Stock" sortKey="orig"      currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Net Adjustment" sortKey="net_adj"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Current Stock"  sortKey="stock"     currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Threshold"      sortKey="threshold" currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Status"         sortKey="status"    currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Created"        sortKey="created"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
                 <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {displayed.map((item) => {
+                const netAdj = netAdjByProduct[item.product_id] ?? 0;
+                const originalStock = item.current_stock - netAdj;
                 const isLow = item.current_stock <= item.low_stock_threshold;
                 const isOut = item.current_stock === 0;
                 return (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-5 py-3 font-medium">{item.product?.name}</td>
-                    <td className="px-5 py-3 font-bold">{item.current_stock}</td>
+                    <td className="px-5 py-3 text-gray-700 font-medium">{originalStock}</td>
+                    <td className="px-5 py-3">
+                      {netAdj === 0 ? (
+                        <span className="text-gray-400">—</span>
+                      ) : (
+                        <span className={netAdj > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                          {netAdj > 0 ? '+' : ''}{netAdj}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 font-bold">
+                      <span className={isOut ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-gray-900'}>
+                        {item.current_stock}
+                      </span>
+                    </td>
                     <td className="px-5 py-3 text-gray-500">{item.low_stock_threshold}</td>
                     <td className="px-5 py-3">
                       {isOut ? <span className="badge badge-danger">Out of Stock</span>

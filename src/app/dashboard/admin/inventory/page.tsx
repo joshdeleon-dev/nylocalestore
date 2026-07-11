@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { AlertCircle, RefreshCw, TrendingDown, Package, X } from 'lucide-react';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
@@ -15,12 +15,18 @@ interface InventoryRow {
   low_stock_threshold: number;
   unit_of_measure: string;
   created_at: string;
-  product: { name: string };
+  product: { name: string; is_available: boolean };
   location: { name: string };
+}
+
+interface LogRow {
+  product_id: number;
+  quantity_change: number;
 }
 
 export default function AdminInventoryPage() {
   const [inventory, setInventory] = useState<InventoryRow[]>([]);
+  const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showLowOnly, setShowLowOnly] = useState(false);
   const [adjustItem, setAdjustItem] = useState<InventoryRow | null>(null);
@@ -30,10 +36,13 @@ export default function AdminInventoryPage() {
   const fetchInventory = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/inventory?limit=500');
-      const json = await res.json();
-      if (!json.success) throw new Error();
-      setInventory(json.data || []);
+      const [invRes, logsRes] = await Promise.all([
+        fetch('/api/inventory?limit=500').then((r) => r.json()),
+        fetch('/api/inventory/logs?limit=5000').then((r) => r.json()),
+      ]);
+      if (!invRes.success) throw new Error();
+      setInventory(invRes.data || []);
+      setLogs(logsRes.data || []);
     } catch {
       toast.error('Failed to load inventory');
     } finally {
@@ -41,9 +50,16 @@ export default function AdminInventoryPage() {
     }
   };
 
-  useEffect(() => {
-    fetchInventory();
-  }, []);
+  useEffect(() => { fetchInventory(); }, []);
+
+  // Net adjustment per product_id: sum of all quantity_change values in logs
+  const netAdjByProduct = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const log of logs) {
+      map[log.product_id] = (map[log.product_id] ?? 0) + log.quantity_change;
+    }
+    return map;
+  }, [logs]);
 
   const handleAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,22 +90,27 @@ export default function AdminInventoryPage() {
     }
   };
 
-  const filtered = showLowOnly
-    ? inventory.filter((i) => i.current_stock <= i.low_stock_threshold)
-    : inventory;
+  // Hide unavailable products; optionally filter to low stock only
+  const filtered = useMemo(() => {
+    return inventory
+      .filter((i) => i.product?.is_available !== false)
+      .filter((i) => !showLowOnly || i.current_stock <= i.low_stock_threshold);
+  }, [inventory, showLowOnly]);
 
   const { sorted: displayed, sortKey, sortDir, requestSort } = useTableSort(filtered, {
-    product:   (i) => i.product?.name,
-    stock:     (i) => i.current_stock,
-    threshold: (i) => i.low_stock_threshold,
-    unit:      (i) => i.unit_of_measure,
-    status:    (i) => i.current_stock === 0 ? 0 : i.current_stock <= i.low_stock_threshold ? 1 : 2,
-    created:   (i) => i.created_at,
+    product:      (i) => i.product?.name,
+    orig:         (i) => (i.current_stock - (netAdjByProduct[i.product_id] ?? 0)),
+    net_adj:      (i) => (netAdjByProduct[i.product_id] ?? 0),
+    stock:        (i) => i.current_stock,
+    threshold:    (i) => i.low_stock_threshold,
+    unit:         (i) => i.unit_of_measure,
+    status:       (i) => i.current_stock === 0 ? 0 : i.current_stock <= i.low_stock_threshold ? 1 : 2,
+    created:      (i) => i.created_at,
   });
 
-  const uniqueProductCount = new Set(inventory.map((i) => i.product_id)).size;
-  const lowCount = inventory.filter((i) => i.current_stock <= i.low_stock_threshold).length;
-  const outCount = inventory.filter((i) => i.current_stock === 0).length;
+  const uniqueProductCount = new Set(filtered.map((i) => i.product_id)).size;
+  const lowCount  = filtered.filter((i) => i.current_stock <= i.low_stock_threshold).length;
+  const outCount  = filtered.filter((i) => i.current_stock === 0).length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -146,12 +167,14 @@ export default function AdminInventoryPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                <SortableHeader label="Product"       sortKey="product"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Current Stock" sortKey="stock"     currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Threshold"     sortKey="threshold" currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Unit"          sortKey="unit"      currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Status"        sortKey="status"    currentKey={sortKey} dir={sortDir} onSort={requestSort} />
-                <SortableHeader label="Created"       sortKey="created"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Product"        sortKey="product"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Original Stock" sortKey="orig"      currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Net Adjustment" sortKey="net_adj"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Current Stock"  sortKey="stock"     currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Threshold"      sortKey="threshold" currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Unit"           sortKey="unit"      currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Status"         sortKey="status"    currentKey={sortKey} dir={sortDir} onSort={requestSort} />
+                <SortableHeader label="Created"        sortKey="created"   currentKey={sortKey} dir={sortDir} onSort={requestSort} />
                 <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Action</th>
               </tr>
             </thead>
@@ -159,25 +182,31 @@ export default function AdminInventoryPage() {
               {loading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
-                      <td colSpan={7} className="px-5 py-3">
+                      <td colSpan={9} className="px-5 py-3">
                         <div className="skeleton h-4 rounded" />
                       </td>
                     </tr>
                   ))
                 : displayed.map((item) => {
+                    const netAdj = netAdjByProduct[item.product_id] ?? 0;
+                    const originalStock = item.current_stock - netAdj;
                     const isLow = item.current_stock <= item.low_stock_threshold;
                     const isOut = item.current_stock === 0;
                     return (
                       <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="px-5 py-3 font-medium text-gray-900">
-                          {item.product?.name}
+                        <td className="px-5 py-3 font-medium text-gray-900">{item.product?.name}</td>
+                        <td className="px-5 py-3 text-gray-700 font-medium">{originalStock}</td>
+                        <td className="px-5 py-3">
+                          {netAdj === 0 ? (
+                            <span className="text-gray-400">—</span>
+                          ) : (
+                            <span className={netAdj > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                              {netAdj > 0 ? '+' : ''}{netAdj}
+                            </span>
+                          )}
                         </td>
                         <td className="px-5 py-3">
-                          <span
-                            className={`font-bold ${
-                              isOut ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-gray-900'
-                            }`}
-                          >
+                          <span className={`font-bold ${isOut ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-gray-900'}`}>
                             {item.current_stock}
                           </span>
                         </td>
@@ -246,9 +275,7 @@ export default function AdminInventoryPage() {
                   placeholder="+10 or -5"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Use positive to add stock, negative to remove
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Use positive to add stock, negative to remove</p>
               </div>
               <div>
                 <label className="label">Reason</label>
@@ -264,18 +291,10 @@ export default function AdminInventoryPage() {
                 </select>
               </div>
               <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setAdjustItem(null)}
-                  className="btn btn-secondary flex-1 justify-center"
-                >
+                <button type="button" onClick={() => setAdjustItem(null)} className="btn btn-secondary flex-1 justify-center">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="btn btn-primary flex-1 justify-center"
-                >
+                <button type="submit" disabled={saving} className="btn btn-primary flex-1 justify-center">
                   {saving ? 'Saving…' : 'Apply'}
                 </button>
               </div>

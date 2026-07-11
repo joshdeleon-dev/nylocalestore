@@ -15,7 +15,9 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
     const statuses = url.searchParams.get('statuses');
-    const startDate = url.searchParams.get('start_date');
+    const startDate  = url.searchParams.get('start_date');
+    const endDate    = url.searchParams.get('end_date');
+    const groupNum   = url.searchParams.get('group_number');
     const includeArchived = url.searchParams.get('include_archived') === 'true';
     const archivedOnly = url.searchParams.get('archived_only') === 'true';
     const limit = parseInt(url.searchParams.get('limit') || '100');
@@ -30,6 +32,8 @@ export async function GET(request: NextRequest) {
     if (status) query = query.eq('status', status);
     else if (statuses) query = query.in('status', statuses.split(','));
     if (startDate) query = query.gte('sales_date', startDate);
+    if (endDate)   query = query.lte('sales_date', endDate);
+    if (groupNum)  query = query.eq('group_number', parseInt(groupNum));
 
     // Archive filtering: hide archived by default; reports pass include_archived=true
     if (archivedOnly) query = query.eq('is_archived', true);

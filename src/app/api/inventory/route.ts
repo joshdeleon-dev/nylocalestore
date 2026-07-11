@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     let query = db
       .from('inventory')
-      .select('*, product:products(name), location:locations(name)', { count: 'exact' })
+      .select('*, product:products(name, is_available), location:locations(name)', { count: 'exact' })
       .eq('location_id', locationId ? parseInt(locationId) : 1); // single-location mode
 
     if (productId) query = query.eq('product_id', parseInt(productId));

@@ -8,7 +8,6 @@ import {
   DollarSign,
   ShoppingBag,
   TrendingUp,
-  Users,
   RefreshCw,
   Clock,
   AlertCircle,
@@ -23,18 +22,24 @@ interface Stats {
   low_stock_count: number;
 }
 
+const etToday = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateFrom, setDateFrom] = useState(etToday);
+  const [dateTo, setDateTo]     = useState(etToday);
+  const [groupFilter, setGroupFilter] = useState('');
 
-  const fetchData = async () => {
+  const fetchData = async (from = dateFrom, to = dateTo, group = groupFilter) => {
     setLoading(true);
     try {
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+      const groupParam = group ? `&group_number=${group}` : '';
       const [statsJson, recentJson] = await Promise.all([
-        fetch('/api/orders/stats').then((r) => r.json()),
-        fetch(`/api/orders?limit=8&start_date=${today}`).then((r) => r.json()),
+        fetch(`/api/orders/stats?start_date=${from}&end_date=${to}${groupParam}`).then((r) => r.json()),
+        fetch(`/api/orders?limit=10&start_date=${from}&end_date=${to}${groupParam}`).then((r) => r.json()),
       ]);
       setStats(statsJson);
       setRecentOrders(recentJson.data || []);
@@ -49,17 +54,19 @@ export default function AdminOverviewPage() {
     fetchData();
   }, []);
 
+  const handleApply = () => fetchData(dateFrom, dateTo, groupFilter);
+
   const statCards = stats
     ? [
         {
-          label: "Today's Revenue",
+          label: 'Revenue',
           value: formatCurrency(stats.revenue_today),
           icon: DollarSign,
           color: 'text-green-600',
           bg: 'bg-green-50',
         },
         {
-          label: "Today's Orders",
+          label: 'Orders',
           value: stats.orders_today,
           icon: ShoppingBag,
           color: 'text-blue-600',
@@ -99,13 +106,66 @@ export default function AdminOverviewPage() {
           </p>
         </div>
         <button
-          onClick={fetchData}
+          onClick={() => fetchData()}
           className="btn btn-secondary btn-sm gap-2"
           disabled={loading}
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
+      </div>
+
+      {/* Filters */}
+      <div className="card mb-6">
+        <div className="card-content">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="label">Order Date Range</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  className="input w-auto"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+                <span className="text-gray-400 text-sm">to</span>
+                <input
+                  type="date"
+                  className="input w-auto"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label">Group #</label>
+              <input
+                type="number"
+                min="1"
+                className="input w-28"
+                value={groupFilter}
+                onChange={(e) => setGroupFilter(e.target.value)}
+                placeholder="All groups"
+              />
+            </div>
+            <button onClick={handleApply} className="btn btn-primary" disabled={loading}>
+              Apply
+            </button>
+            <button
+              onClick={() => {
+                const t = etToday();
+                setDateFrom(t);
+                setDateTo(t);
+                setGroupFilter('');
+                fetchData(t, t, '');
+              }}
+              className="btn btn-secondary"
+              disabled={loading}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Low Stock Alert */}
@@ -167,7 +227,7 @@ export default function AdminOverviewPage() {
       {/* Recent Orders */}
       <div className="card">
         <div className="card-content border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900">Today's Orders</h2>
+          <h2 className="font-semibold text-gray-900">Orders</h2>
           <Link
             href="/dashboard/admin/orders"
             className="text-sm text-coffee-700 hover:text-coffee-800 font-medium"
@@ -179,21 +239,11 @@ export default function AdminOverviewPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Order
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Customer
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">
-                  Date
-                </th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Status
-                </th>
-                <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Total
-                </th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Order</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide hidden md:table-cell">Date</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -218,9 +268,7 @@ export default function AdminOverviewPage() {
                         {formatDateTime(order.created_at)}
                       </td>
                       <td className="px-6 py-3">
-                        <span
-                          className={`badge ${getOrderStatusColor(order.status as OrderStatus)}`}
-                        >
+                        <span className={`badge ${getOrderStatusColor(order.status as OrderStatus)}`}>
                           {getOrderStatusLabel(order.status as OrderStatus)}
                         </span>
                       </td>
@@ -232,7 +280,7 @@ export default function AdminOverviewPage() {
             </tbody>
           </table>
           {!loading && recentOrders.length === 0 && (
-            <div className="text-center py-8 text-gray-400">No orders yet today.</div>
+            <div className="text-center py-8 text-gray-400">No orders found for the selected range.</div>
           )}
         </div>
       </div>
