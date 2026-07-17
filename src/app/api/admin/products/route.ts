@@ -46,9 +46,8 @@ export async function POST(req: NextRequest) {
         }))
       );
     }
-    if (stock !== undefined && stock !== '') {
-      await upsertInventory(data.id, parseInt(stock) || 0);
-    }
+    // Always create an inventory record for new products; default to 0 if stock not provided
+    await upsertInventory(data.id, stock !== undefined && stock !== '' ? parseInt(stock) || 0 : 0);
     return NextResponse.json({ product: data });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
