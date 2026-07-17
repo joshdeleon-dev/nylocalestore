@@ -149,7 +149,7 @@ export default function ProductDetailPage() {
       <div className="max-w-2xl mx-auto pb-32">
 
         {/* Product image */}
-        <div className="relative bg-coffee-100 overflow-hidden" style={{ height: '300px' }}>
+        <div className="relative bg-coffee-100 overflow-hidden" style={{ height: '510px' }}>
           {product.image_url ? (
             <img
               src={product.image_url}
