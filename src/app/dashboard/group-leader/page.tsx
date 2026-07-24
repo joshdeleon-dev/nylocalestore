@@ -89,7 +89,9 @@ export default function GroupLeaderReportsPage() {
     if (groupNumber == null) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/orders?start_date=${dateFrom}&limit=2000&include_archived=true`);
+      const res = await fetch(
+        `/api/orders?start_date=${dateFrom}&end_date=${dateTo}&group_number=${groupNumber}&limit=5000&include_archived=true`
+      );
       const json = await res.json();
       setRawOrders(json.data || []);
       setDrilldown(null);
@@ -100,7 +102,7 @@ export default function GroupLeaderReportsPage() {
     }
   };
 
-  useEffect(() => { fetchOrders(); }, [dateFrom, groupNumber]);
+  useEffect(() => { fetchOrders(); }, [dateFrom, dateTo, groupNumber]);
 
   // Only orders belonging to this group, within the date range
   const filteredOrders = useMemo(() => rawOrders.filter((o) => {
@@ -115,7 +117,7 @@ export default function GroupLeaderReportsPage() {
     const completed = filteredOrders.filter((o) => o.status === 'COMPLETED');
     const cancelled = filteredOrders.filter((o) => o.status === 'CANCELLED');
     const totalRev  = completed.reduce((s: number, o: any) => s + o.total, 0);
-    setSummary({ revenue: totalRev, orders: filteredOrders.length - cancelled.length, avg: completed.length ? totalRev / completed.length : 0, cancelled: cancelled.length });
+    setSummary({ revenue: totalRev, orders: filteredOrders.length, avg: completed.length ? totalRev / completed.length : 0, cancelled: cancelled.length });
 
     const byDate: Record<string, { revenue: number; orders: number }> = {};
     filteredOrders.forEach((o) => {
