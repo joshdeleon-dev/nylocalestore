@@ -115,7 +115,7 @@ export default function GroupLeaderReportsPage() {
     const completed = filteredOrders.filter((o) => o.status === 'COMPLETED');
     const cancelled = filteredOrders.filter((o) => o.status === 'CANCELLED');
     const totalRev  = completed.reduce((s: number, o: any) => s + o.total, 0);
-    setSummary({ revenue: totalRev, orders: filteredOrders.length, avg: completed.length ? totalRev / completed.length : 0, cancelled: cancelled.length });
+    setSummary({ revenue: totalRev, orders: filteredOrders.length - cancelled.length, avg: completed.length ? totalRev / completed.length : 0, cancelled: cancelled.length });
 
     const byDate: Record<string, { revenue: number; orders: number }> = {};
     filteredOrders.forEach((o) => {
