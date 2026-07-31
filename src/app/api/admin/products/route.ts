@@ -14,6 +14,17 @@ async function verifyStaff(req: NextRequest) {
   return user;
 }
 
+async function updateOriginalStock(productId: number, stock: number) {
+  const { data: existing } = await db.from('inventory')
+    .select('id')
+    .eq('product_id', productId)
+    .eq('location_id', 1)
+    .single();
+  if (existing) {
+    await db.from('inventory').update({ original_stock: stock }).eq('id', existing.id);
+  }
+}
+
 async function upsertInventory(productId: number, stock: number) {
   const { data: existing } = await db.from('inventory')
     .select('id')
@@ -62,7 +73,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   if (!await verifyStaff(req)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   try {
-    const { id, modifier_group_ids, stock, ...payload } = await req.json();
+    const { id, modifier_group_ids, stock, original_stock, ...payload } = await req.json();
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
     const { data, error } = await db.from('products').update(payload).eq('id', id).select().single();
     if (error) throw error;
@@ -78,6 +89,9 @@ export async function PATCH(req: NextRequest) {
     }
     if (stock !== undefined && stock !== '') {
       await upsertInventory(id, parseInt(stock) || 0);
+    }
+    if (original_stock !== undefined && original_stock !== '') {
+      await updateOriginalStock(id, parseInt(original_stock) || 0);
     }
     return NextResponse.json({ product: data });
   } catch (e: any) {

@@ -223,7 +223,8 @@ export default function AdminProductsPage() {
       fetchProductModifiers(p.id),
       fetch(`/api/inventory?product_id=${p.id}&location_id=1`).then((r) => r.json()),
     ]);
-    const stock = invRes.data?.[0]?.current_stock ?? '';
+    const invRow = invRes.data?.[0];
+    const stock = invRow?.original_stock != null ? String(invRow.original_stock) : '';
     setEditingProduct(p);
     setProductForm({
       name: p.name, description: p.description || '',
@@ -271,7 +272,12 @@ export default function AdminProductsPage() {
         stock: productForm.stock,
       };
       if (editingProduct) {
-        await apiCall('/api/admin/products', 'PATCH', { id: editingProduct.id, ...payload });
+        const { stock: _, ...rest } = payload;
+        await apiCall('/api/admin/products', 'PATCH', {
+          id: editingProduct.id,
+          ...rest,
+          original_stock: productForm.stock,
+        });
         toast.success('Product updated');
       } else {
         await apiCall('/api/admin/products', 'POST', payload);
@@ -832,8 +838,7 @@ export default function AdminProductsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Original Quantity / Stock</label>
-                  <input className="input" type="number" min="0" value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })} placeholder="Leave empty if not tracked" disabled={!!editingProduct} title={editingProduct ? 'Original stock cannot be changed after creation' : ''} />
-                  {editingProduct && <p className="text-xs text-gray-400 mt-1">Set at creation — use Inventory to adjust current stock.</p>}
+                  <input className="input" type="number" min="0" value={productForm.stock} onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })} placeholder="Leave empty if not tracked" />
                 </div>
                 <div>
                   <label className="label">Display Order</label>
