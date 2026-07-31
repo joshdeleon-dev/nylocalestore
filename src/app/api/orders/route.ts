@@ -274,6 +274,28 @@ export async function PATCH(request: NextRequest) {
       updates.cancelled_date = new Date().toISOString();
     }
 
+    // Restore inventory when cancelling — only if not already cancelled
+    if (updates.status === 'CANCELLED') {
+      const { data: current } = await db.from('orders').select('status').eq('id', id).single();
+      if (current && current.status !== 'CANCELLED') {
+        const { data: orderItems } = await db.from('order_items')
+          .select('product_id, quantity')
+          .eq('order_id', id);
+        for (const item of (orderItems || []) as { product_id: number; quantity: number }[]) {
+          const { data: inv } = await db.from('inventory')
+            .select('id, current_stock')
+            .eq('product_id', item.product_id)
+            .eq('location_id', 1)
+            .maybeSingle();
+          if (inv) {
+            await db.from('inventory')
+              .update({ current_stock: inv.current_stock + item.quantity })
+              .eq('id', inv.id);
+          }
+        }
+      }
+    }
+
     const { data, error } = await db.from('orders').update(updates).eq('id', id).select().single();
     if (error) throw error;
     return NextResponse.json({ success: true, data });
