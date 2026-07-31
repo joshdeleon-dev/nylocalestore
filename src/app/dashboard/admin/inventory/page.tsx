@@ -102,7 +102,7 @@ export default function AdminInventoryPage() {
 
   const { sorted: displayed, sortKey, sortDir, requestSort } = useTableSort(filtered, {
     product:      (i) => i.product?.name,
-    orig:         (i) => (i.original_stock ?? i.current_stock),
+    orig:         (i) => (i.original_stock ?? -1),
     net_adj:      (i) => (netAdjByProduct[i.product_id] ?? 0),
     stock:        (i) => i.current_stock,
     threshold:    (i) => i.low_stock_threshold,
@@ -192,13 +192,13 @@ export default function AdminInventoryPage() {
                   ))
                 : displayed.map((item) => {
                     const netAdj = netAdjByProduct[item.product_id] ?? 0;
-                    const originalStock = item.original_stock ?? item.current_stock;
+                    const originalStock = item.original_stock;
                     const isLow = item.current_stock <= item.low_stock_threshold;
                     const isOut = item.current_stock === 0;
                     return (
                       <tr key={item.id} className="hover:bg-gray-50">
                         <td className="px-5 py-3 font-medium text-gray-900">{item.product?.name}</td>
-                        <td className="px-5 py-3 text-gray-700 font-medium">{originalStock}</td>
+                        <td className="px-5 py-3 text-gray-700 font-medium">{originalStock ?? '—'}</td>
                         <td className="px-5 py-3">
                           {netAdj === 0 ? (
                             <span className="text-gray-400">—</span>
