@@ -260,6 +260,7 @@ export interface CartItem {
   quantity: number;
   unit_price: number;
   modifiers: CartItemModifier[];
+  max_stock?: number | null;
 }
 
 export interface Cart {

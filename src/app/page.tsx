@@ -24,28 +24,34 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [orderingActive, setOrderingActive] = useState(true);
 
+  const fetchData = async () => {
+    try {
+      const [{ data: categoriesData }, prodsRes, { data: slidesData }, announcementsRes, settingsRes] = await Promise.all([
+        supabase.from('categories').select('*').eq('is_active', true).order('display_order'),
+        fetch('/api/products').then((r) => r.json()),
+        supabase.from('hero_slides').select('*').eq('is_active', true).order('display_order'),
+        fetch('/api/announcements').then((r) => r.json()),
+        fetch('/api/settings').then((r) => r.json()),
+      ]);
+      setCategories(categoriesData || []);
+      setProducts(prodsRes.data || []);
+      setHeroSlides(slidesData || []);
+      setAnnouncements(announcementsRes.data || []);
+      if (settingsRes.data) setOrderingActive(settingsRes.data.ordering_status ?? true);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [{ data: categoriesData }, prodsRes, { data: slidesData }, announcementsRes, settingsRes] = await Promise.all([
-          supabase.from('categories').select('*').eq('is_active', true).order('display_order'),
-          fetch('/api/products').then((r) => r.json()),
-          supabase.from('hero_slides').select('*').eq('is_active', true).order('display_order'),
-          fetch('/api/announcements').then((r) => r.json()),
-          fetch('/api/settings').then((r) => r.json()),
-        ]);
-        setCategories(categoriesData || []);
-        setProducts(prodsRes.data || []);
-        setHeroSlides(slidesData || []);
-        setAnnouncements(announcementsRes.data || []);
-        if (settingsRes.data) setOrderingActive(settingsRes.data.ordering_status ?? true);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchData();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
   const featuredProducts = products.filter((p) => p.is_featured);
@@ -171,7 +177,7 @@ export default function Home() {
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {featuredProducts.map((product) => {
-                    const soldOut = product.current_stock === 0;
+                    const soldOut = product.current_stock === null || product.current_stock === 0;
                     const disabled = soldOut || !orderingActive;
                     const El = disabled ? 'div' : Link;
                     const props = disabled ? {} : { href: `/product/${product.id}` };
@@ -242,7 +248,7 @@ export default function Home() {
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {filteredProducts.map((product) => {
-                    const soldOut = product.current_stock === 0;
+                    const soldOut = product.current_stock === null || product.current_stock === 0;
                     const disabled = soldOut || !orderingActive;
                     const El = disabled ? 'div' : Link;
                     const props = disabled ? {} : { href: `/product/${product.id}` };

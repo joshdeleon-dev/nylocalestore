@@ -111,11 +111,25 @@ export default function ProductDetailPage() {
   const handleAddToCart = async () => {
     if (!product || !canAddToCart()) return;
     setAdding(true);
-    const mods = getSelectedModifierObjects();
-    for (let i = 0; i < quantity; i++) addItem(product, mods);
-    toast.success(`${product.name} added to cart!`);
-    setAdding(false);
-    router.push('/');
+    try {
+      // Re-fetch stock to catch changes since page load
+      const freshRes = await fetch(`/api/products/${params.id}`);
+      const freshJson = await freshRes.json();
+      const freshStock: number | null = freshJson.data?.current_stock ?? null;
+      if (freshStock === null || freshStock < quantity) {
+        setProduct((p) => p ? { ...p, current_stock: freshStock } as any : p);
+        toast.error(freshStock === 0 || freshStock === null
+          ? 'Sorry, this item just sold out.'
+          : `Only ${freshStock} available — please reduce your quantity.`);
+        return;
+      }
+      const mods = getSelectedModifierObjects();
+      for (let i = 0; i < quantity; i++) addItem(product, mods, freshStock);
+      toast.success(`${product.name} added to cart!`);
+      router.push('/');
+    } finally {
+      setAdding(false);
+    }
   };
 
   if (loading) {
@@ -128,7 +142,7 @@ export default function ProductDetailPage() {
 
   if (!product) return null;
 
-  const soldOut = (product as any).current_stock === 0;
+  const soldOut = (product as any).current_stock === null || (product as any).current_stock === 0;
 
   return (
     <div className="min-h-screen bg-coffee-50">

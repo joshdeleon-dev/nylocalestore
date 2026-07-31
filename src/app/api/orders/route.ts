@@ -105,6 +105,24 @@ export async function POST(request: NextRequest) {
     const tax = calculateTax(subtotal, tax_rate);
     const total = calculateTotal(subtotal, tax);
 
+    // Validate stock for all items before creating the order
+    for (const item of enrichedItems) {
+      const { data: inv } = await db.from('inventory')
+        .select('current_stock')
+        .eq('product_id', item.product_id)
+        .eq('location_id', 1)
+        .maybeSingle();
+      const stock = inv?.current_stock ?? null;
+      if (stock === null || stock < item.quantity) {
+        return NextResponse.json({
+          success: false,
+          error: !stock
+            ? 'One or more items in your order are currently out of stock'
+            : `Only ${stock} unit${stock !== 1 ? 's' : ''} available — please adjust your quantity`,
+        }, { status: 400 });
+      }
+    }
+
     // Create order
     const { data: order, error: orderError } = await db
       .from('orders')
@@ -155,16 +173,17 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Deduct from inventory (location 1 = NY Locale Store - Downtown)
+      // Deduct from inventory atomically — .gte() guard prevents over-deduction in concurrent orders
       const { data: inv } = await db.from('inventory')
         .select('id, current_stock')
         .eq('product_id', item.product_id)
         .eq('location_id', 1)
-        .single();
-      if (inv && inv.current_stock > 0) {
+        .maybeSingle();
+      if (inv && inv.current_stock >= item.quantity) {
         await db.from('inventory')
-          .update({ current_stock: Math.max(0, inv.current_stock - item.quantity) })
-          .eq('id', inv.id);
+          .update({ current_stock: inv.current_stock - item.quantity })
+          .eq('id', inv.id)
+          .gte('current_stock', item.quantity);
       }
     }
 

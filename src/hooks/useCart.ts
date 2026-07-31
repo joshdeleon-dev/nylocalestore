@@ -12,7 +12,7 @@ interface CartStore {
   total: number;
   taxRate: number;
 
-  addItem: (product: Product, modifiers: Modifier[]) => void;
+  addItem: (product: Product, modifiers: Modifier[], stock?: number | null) => void;
   removeItem: (cartItemId: string) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
   editItem: (cartItemId: string, modifiers: Modifier[]) => void;
@@ -43,7 +43,7 @@ export const useCartStore = create<CartStore>()(
       total: 0,
       taxRate: 0,
 
-      addItem: (product, modifiers) => {
+      addItem: (product, modifiers, stock) => {
         set((state) => {
           const cartItem: CartItem = {
             id: createCartId(),
@@ -56,6 +56,7 @@ export const useCartStore = create<CartStore>()(
               name: m.name,
               price_adjustment: m.price_adjustment,
             })),
+            max_stock: stock ?? null,
           };
 
           const newItems = [...state.items, cartItem];
@@ -94,9 +95,11 @@ export const useCartStore = create<CartStore>()(
             return state;
           }
 
-          const newItems = state.items.map((item) =>
-            item.id === cartItemId ? { ...item, quantity } : item
-          );
+          const newItems = state.items.map((item) => {
+            if (item.id !== cartItemId) return item;
+            const capped = item.max_stock != null ? Math.min(quantity, item.max_stock) : quantity;
+            return { ...item, quantity: capped };
+          });
 
           const newSubtotal = calculateSubtotal(newItems);
           const newTax = calculateTax(newSubtotal, state.taxRate);
