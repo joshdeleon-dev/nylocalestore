@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const [ordersRes, activeRes, invRes] = await Promise.all([
       ordersQuery,
       db.from('orders').select('id').in('status', ['NEW', 'ACCEPTED', 'IN_PROGRESS', 'READY']),
-      db.from('inventory').select('current_stock, low_stock_threshold'),
+      db.from('inventory').select('current_stock, low_stock_threshold, product:products(is_archived, is_available)'),
     ]);
 
     const orders = ordersRes.data || [];
@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
     const revenue = completed.reduce((s: number, o: any) => s + Number(o.total), 0);
     const avg = completed.length ? revenue / completed.length : 0;
     const lowStock = (invRes.data || []).filter(
-      (i: any) => i.current_stock <= i.low_stock_threshold
+      (i: any) =>
+        i.product?.is_archived !== true &&
+        i.product?.is_available !== false &&
+        i.current_stock <= i.low_stock_threshold
     ).length;
 
     return NextResponse.json({
