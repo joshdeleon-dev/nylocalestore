@@ -65,7 +65,7 @@ async function ordersReport(
   const needsItems = fields.some((f) => ITEM_FIELDS.has(f));
 
   const selectStr = needsItems
-    ? `order_number, status, order_date, sales_date, created_at, updated_at, completed_date, cancelled_date, payment_method, payment_status, subtotal, tax, total, customer_name, customer_phone, group_number, notes, order_items(quantity, unit_price, line_total, product:products(name, category:categories(name)), order_item_modifiers(name))`
+    ? `order_number, status, order_date, sales_date, created_at, updated_at, completed_date, cancelled_date, payment_method, payment_status, subtotal, tax, total, customer_name, customer_phone, group_number, notes, order_items(quantity, unit_price, line_total, product:products(name, base_price, category:categories(name)), order_item_modifiers(name))`
     : `order_number, status, order_date, sales_date, created_at, updated_at, completed_date, cancelled_date, payment_method, payment_status, subtotal, tax, total, customer_name, customer_phone, group_number, notes`;
 
   let query = db.from('orders').select(selectStr).order('created_at', { ascending: false }).limit(2000);
@@ -98,7 +98,7 @@ async function ordersReport(
           if (fields.includes('product_name')) row.product_name = item.product?.name ?? '';
           if (fields.includes('category')) row.category = item.product?.category?.name ?? '';
           if (fields.includes('quantity')) row.quantity = item.quantity ?? 0;
-          if (fields.includes('unit_price')) row.unit_price = fmtCurrency(item.unit_price);
+          if (fields.includes('unit_price')) row.unit_price = fmtCurrency(item.product?.base_price ?? item.unit_price);
           if (fields.includes('line_total')) row.line_total = fmtCurrency(item.line_total);
           if (fields.includes('modifiers'))
             row.modifiers = ((item.order_item_modifiers as any[]) ?? []).map((m) => m.name).join(', ');
