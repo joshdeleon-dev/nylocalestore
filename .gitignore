@@ -49,3 +49,5 @@ tsconfig.tsbuildinfo
 
 # Backup of production env values (never loaded by Next.js)
 .env.production-backup
+.vercel
+.env*
