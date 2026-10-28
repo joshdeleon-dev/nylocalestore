@@ -42,11 +42,17 @@ function getSessionFromCookies(req: NextRequest): boolean {
 // Every other host (food.*, *.vercel.app, localhost) is untouched.
 const LANDING_HOSTS = ['www.nylocalestore.com', 'nylocalestore.com', 'staging.nylocalestore.com'];
 
+// Hosts that show only the Marketplace "coming soon" page, on every path.
+const SHOP_HOSTS = ['shop.nylocalestore.com', 'shop-staging.nylocalestore.com'];
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const { pathname } = req.nextUrl;
 
   const host = (req.headers.get('host') ?? '').split(':')[0].toLowerCase();
+  if (SHOP_HOSTS.includes(host)) {
+    return NextResponse.rewrite(new URL('/coming-soon', req.url));
+  }
   if (pathname === '/' && LANDING_HOSTS.includes(host)) {
     return NextResponse.rewrite(new URL('/landing', req.url));
   }
