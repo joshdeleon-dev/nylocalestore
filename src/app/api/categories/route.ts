@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
+
+const db = supabaseAdmin ?? supabase;
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,7 +10,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(url.searchParams.get('limit') || '100');
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
-    let query = supabase
+    let query = db
       .from('categories')
       .select('*', { count: 'exact' })
       .eq('is_active', true)
@@ -33,6 +36,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireRole(request, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const { name, description, display_order } = body;
@@ -44,7 +50,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: category, error } = await supabase
+    const { data: category, error } = await db
       .from('categories')
       .insert({
         name,

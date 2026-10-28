@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
-
+import { getApiUser, ORDER_STAFF } from '@/lib/apiAuth';
 
 const db = supabaseAdmin ?? supabase;
 
@@ -39,6 +39,14 @@ export async function GET(
         modifiers: item.order_item_modifiers || [],
       })),
     };
+
+    // Order ids are sequential, so the public confirmation page gets no personal details.
+    // The customer's own name/notes come from checkout via sessionStorage instead.
+    const user = await getApiUser(request);
+    if (!user || !ORDER_STAFF.includes(user.role)) {
+      const { customer_name, customer_phone, notes, ...publicOrder } = order;
+      return NextResponse.json({ success: true, data: publicOrder });
+    }
 
     return NextResponse.json({ success: true, data: order });
   } catch (error) {

@@ -18,7 +18,11 @@ export default function ConfirmationClient({ id }: { id: string }) {
         const res = await fetch(`/api/orders/${id}`);
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || 'Not found');
-        setOrder(json.data);
+        let contact = {};
+        try {
+          contact = JSON.parse(sessionStorage.getItem(`order-contact-${id}`) || '{}');
+        } catch {}
+        setOrder({ ...json.data, ...contact });
       } catch (error) {
         console.error('Error fetching order:', error);
       } finally {

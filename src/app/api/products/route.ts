@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,6 +54,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireRole(request, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const { name, description, category_id, base_price, image_url, display_order } = body;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_ONLY } from '@/lib/apiAuth';
 
 const db = supabaseAdmin ?? supabase;
 
@@ -63,6 +64,9 @@ async function seedModifierPermissions() {
 
 // GET — fetch all roles, permissions, and current assignments
 export async function GET(req: NextRequest) {
+  const auth = await requireRole(req, ADMIN_ONLY);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     await seedModifierPermissions();
 

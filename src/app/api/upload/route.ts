@@ -1,21 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
 
 const db = supabaseAdmin ?? supabase;
 
+const ALLOWED_BUCKETS = ['product-images', 'hero-images'];
+const MAX_BYTES = 10 * 1024 * 1024;
+
 export async function POST(req: NextRequest) {
+  const auth = await requireRole(req, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const token = req.headers.get('authorization')?.slice(7);
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const { data: { user } } = await db.auth.getUser(token);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const bucket = (formData.get('bucket') as string) || 'product-images';
 
+    if (!ALLOWED_BUCKETS.includes(bucket)) return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 });
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+    if (!file.type.startsWith('image/')) return NextResponse.json({ error: 'Only image files are allowed' }, { status: 400 });
+    if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Image must be 10 MB or smaller' }, { status: 400 });
 
     const ext = file.name.split('.').pop() ?? 'jpg';
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;

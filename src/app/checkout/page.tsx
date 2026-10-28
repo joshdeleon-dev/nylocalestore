@@ -88,6 +88,13 @@ export default function CheckoutPage() {
       if (!response.ok) throw new Error(result.error || 'Failed to create order');
 
       toast.success('Order placed successfully!');
+      try {
+        // The public order lookup omits personal details; hand them to the confirmation page directly
+        sessionStorage.setItem(`order-contact-${result.data.id}`, JSON.stringify({
+          customer_name: result.data.customer_name,
+          notes: result.data.notes,
+        }));
+      } catch {}
       clearCart();
       router.push(`/confirmation/${result.data.id}`);
     } catch (error) {

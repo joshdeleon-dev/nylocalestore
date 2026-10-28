@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_ONLY } from '@/lib/apiAuth';
+
+const db = supabaseAdmin ?? supabase;
 
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const activeOnly = url.searchParams.get('active_only') === 'true';
 
-    let query = supabase.from('locations').select('*').order('name');
+    let query = db.from('locations').select('*').order('name');
 
     if (activeOnly) {
       query = query.eq('is_active', true);
@@ -30,6 +33,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireRole(request, ADMIN_ONLY);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await request.json();
     const {
@@ -47,7 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: location, error } = await supabase
+    const { data: location, error } = await db
       .from('locations')
       .insert({
         name,

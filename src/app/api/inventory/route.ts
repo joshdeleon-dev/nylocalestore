@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
 
 const db = supabaseAdmin ?? supabase;
 
 export async function GET(request: NextRequest) {
+  const auth = await requireRole(request, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const url = new URL(request.url);
     const locationId = url.searchParams.get('location_id');
@@ -35,6 +39,9 @@ export async function GET(request: NextRequest) {
 
 // Upsert inventory stock for a product (used when setting stock from product form)
 export async function PUT(request: NextRequest) {
+  const auth = await requireRole(request, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { product_id, location_id = 1, current_stock, low_stock_threshold = 5 } = await request.json();
     if (!product_id || current_stock === undefined) {
@@ -74,6 +81,9 @@ export async function PUT(request: NextRequest) {
 
 // Adjust inventory by delta (used by inventory pages)
 export async function POST(request: NextRequest) {
+  const auth = await requireRole(request, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { product_id, location_id, quantity_change, adjustment_reason } = await request.json();
 
@@ -119,6 +129,9 @@ export async function POST(request: NextRequest) {
 
 // Direct update by inventory row ID (used by admin/manager inventory adjustment modals)
 export async function PATCH(request: NextRequest) {
+  const auth = await requireRole(request, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id, current_stock } = await request.json();
     if (!id || current_stock === undefined) {

@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_ONLY } from '@/lib/apiAuth';
+
+const db = supabaseAdmin ?? supabase;
 
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const locationId = url.searchParams.get('location_id');
 
-    let query = supabase.from('locations').select('*').eq('is_active', true);
+    let query = db.from('locations').select('*').eq('is_active', true);
     if (locationId) query = query.eq('id', locationId);
 
     const { data, error } = await query.limit(1).single();
@@ -19,6 +22,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await requireRole(req, ADMIN_ONLY);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const { location_id, name, address, phone, tax_rate, estimated_wait_time, store_status, ordering_status } = body;
@@ -36,7 +42,7 @@ export async function PUT(req: NextRequest) {
     if (store_status !== undefined) updates.store_status = store_status;
     if (ordering_status !== undefined) updates.ordering_status = ordering_status;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('locations')
       .update(updates)
       .eq('id', location_id)

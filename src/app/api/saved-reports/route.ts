@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
 
 const db = supabaseAdmin ?? supabase;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireRole(req, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   const { data, error } = await db
     .from('saved_reports')
     .select('*')
@@ -19,6 +23,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireRole(req, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const token = req.headers.get('authorization')?.slice(7);
     let created_by: string | undefined;
@@ -48,6 +55,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await requireRole(req, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

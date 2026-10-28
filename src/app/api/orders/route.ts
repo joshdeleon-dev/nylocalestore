@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ORDER_STAFF } from '@/lib/apiAuth';
 import { generateOrderNumber, calculateTax, calculateTotal } from '@/utils/helpers';
 
 // Returns the current business date in Eastern time (NY): "2024-12-24"
@@ -11,13 +12,21 @@ function salesDateEastern(): string {
 const db = supabaseAdmin ?? supabase;
 
 export async function GET(request: NextRequest) {
+  const auth = await requireRole(request, [...ORDER_STAFF, 'GROUP_LEADER']);
+  if (auth instanceof NextResponse) return auth;
+
+  // Group leaders self-register, so they only ever see their own group's orders
+  if (auth.role === 'GROUP_LEADER' && auth.group_number == null) {
+    return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+  }
+
   try {
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
     const statuses = url.searchParams.get('statuses');
     const startDate  = url.searchParams.get('start_date');
     const endDate    = url.searchParams.get('end_date');
-    const groupNum   = url.searchParams.get('group_number');
+    const groupNum   = auth.role === 'GROUP_LEADER' ? String(auth.group_number) : url.searchParams.get('group_number');
     const includeArchived = url.searchParams.get('include_archived') === 'true';
     const archivedOnly = url.searchParams.get('archived_only') === 'true';
     const limit = parseInt(url.searchParams.get('limit') || '100');
@@ -262,6 +271,9 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const auth = await requireRole(request, ORDER_STAFF);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { id, ...updates } = await request.json();
     if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 });

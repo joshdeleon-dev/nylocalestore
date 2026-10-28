@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
+
+const db = supabaseAdmin ?? supabase;
 
 export async function GET(req: NextRequest) {
   try {
@@ -7,7 +10,7 @@ export async function GET(req: NextRequest) {
     const productId = url.searchParams.get('product_id');
 
     if (productId) {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('product_modifier_groups')
         .select('*, modifier_group:modifier_groups(*, modifiers(*))')
         .eq('product_id', productId)
@@ -16,7 +19,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, data });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('modifier_groups')
       .select('*, modifiers(*)')
       .order('display_order');
@@ -29,6 +32,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireRole(req, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const { name, is_required, min_selection, max_selection, display_order } = body;
@@ -37,7 +43,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('modifier_groups')
       .insert({ name, is_required: is_required ?? false, min_selection: min_selection ?? 0, max_selection, display_order: display_order ?? 0 })
       .select()

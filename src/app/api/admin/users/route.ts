@@ -10,7 +10,8 @@ async function verifyStaff(req: NextRequest) {
   if (!user) return null;
   const { data: profile } = await db.from('users').select('*, role:roles(name)').eq('id', user.id).single();
   const role = (profile as any)?.role?.name;
-  if (!['ADMIN', 'MANAGER'].includes(role)) return null;
+  // Only admins manage staff accounts (managers could otherwise create admins)
+  if (role !== 'ADMIN') return null;
   return user;
 }
 

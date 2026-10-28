@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { requireRole, ADMIN_ONLY } from '@/lib/apiAuth';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireRole(req, ADMIN_ONLY);
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   try {
     const { data, error } = await supabase
@@ -20,6 +24,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireRole(req, ADMIN_ONLY);
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   try {
     const body = await req.json();
@@ -48,6 +55,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireRole(req, ADMIN_ONLY);
+  if (auth instanceof NextResponse) return auth;
+
   const { id } = await params;
   try {
     const { error } = await supabase

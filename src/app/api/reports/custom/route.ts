@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
 
 const db = supabaseAdmin ?? supabase;
 
@@ -36,6 +37,9 @@ function fmtValue(field: string, value: any) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireRole(req, ADMIN_MANAGER);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
     const { source, fields, filters = {} } = body as {
