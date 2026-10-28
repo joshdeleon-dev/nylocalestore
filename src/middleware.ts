@@ -38,9 +38,18 @@ function getSessionFromCookies(req: NextRequest): boolean {
   }
 }
 
+// Hosts whose root shows the landing page instead of the food storefront.
+// Every other host (food.*, *.vercel.app, localhost) is untouched.
+const LANDING_HOSTS = ['www.nylocalestore.com', 'nylocalestore.com', 'staging.nylocalestore.com'];
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const { pathname } = req.nextUrl;
+
+  const host = (req.headers.get('host') ?? '').split(':')[0].toLowerCase();
+  if (pathname === '/' && LANDING_HOSTS.includes(host)) {
+    return NextResponse.rewrite(new URL('/landing', req.url));
+  }
 
   const isPublic = PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(p + '/')
