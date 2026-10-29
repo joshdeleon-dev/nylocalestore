@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X, Upload, Trash2, Star, Loader2, History, Phone, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LocaleSplitCalculator } from './LocaleSplitCalculator';
+import { checkPhoto, uploadPhotos } from '@/lib/marketplaceUpload';
 import {
   ALLOWED_ACTIONS, CONDITION_LABELS, STATUS_BADGE, STATUS_LABELS, formatCents,
 } from '@/lib/marketplace';
@@ -131,18 +132,31 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
     await load(id);
   };
 
-  const upload = async (files: FileList | null) => {
-    if (!id || !files?.length) return;
-    setUploading(true);
-    const fd = new FormData();
-    Array.from(files).forEach((f) => fd.append('file', f));
-    const res = await fetch(`/api/admin/marketplace/listings/${id}/images`, { method: 'POST', body: fd });
-    const json = await res.json();
-    setUploading(false);
+  const upload = async (fileList: FileList | null) => {
+    if (!id || !fileList?.length) return;
+    const files = Array.from(fileList);
+    const problem = files.map(checkPhoto).find(Boolean);
     if (fileInput.current) fileInput.current.value = '';
-    if (!res.ok) { toast.error(json.error || 'Upload failed'); return; }
-    onChanged();
-    await load(id);
+    if (problem) { toast.error(problem); return; }
+
+    setUploading(true);
+    try {
+      const endpoint = `/api/admin/marketplace/listings/${id}/images`;
+      const paths = await uploadPhotos(endpoint, files);
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'attach', paths }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Upload failed');
+      onChanged();
+      await load(id);
+    } catch (e: any) {
+      toast.error(e.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const removeImage = async (imageId: number) => {
@@ -238,7 +252,7 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
                     <h3 className="text-sm font-semibold text-gray-900">Photos</h3>
                     {!readOnly && (
                       <>
-                        <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
+                        <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(e) => upload(e.target.files)} />
                         <button type="button" disabled={uploading} onClick={() => fileInput.current?.click()} className="btn btn-secondary btn-sm gap-1.5">
                           {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                           Add photos

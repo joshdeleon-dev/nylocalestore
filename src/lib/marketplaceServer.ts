@@ -10,13 +10,46 @@ export const PENDING_BUCKET = 'marketplace-pending';
 export const PUBLIC_BUCKET = 'marketplace-public';
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 export const MAX_IMAGES_PER_LISTING = 10;
+// HEIC is excluded because most browsers can't display it (iPhones convert to JPEG on upload)
 export const IMAGE_TYPES: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
-  'image/heic': 'heic',
-  'image/heif': 'heif',
 };
+
+export interface UploadRequest { type: string; size: number }
+
+// Vercel caps request bodies at 4.5 MB, so photos go from the browser straight to the
+// private bucket using one-time signed upload URLs issued here.
+export async function createUploadUrls(folder: string, files: UploadRequest[]) {
+  for (const f of files) {
+    if (!IMAGE_TYPES[f.type]) throw new UploadError('Photos must be JPG, PNG or WebP');
+    if (!(f.size > 0) || f.size > MAX_IMAGE_BYTES) throw new UploadError('Each photo must be 10 MB or smaller');
+  }
+  return Promise.all(
+    files.map(async (f) => {
+      const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${IMAGE_TYPES[f.type]}`;
+      const { data, error } = await db.storage.from(PENDING_BUCKET).createSignedUploadUrl(path);
+      if (error) throw error;
+      return { path, token: data.token };
+    })
+  );
+}
+
+// Only accept paths inside the expected folder that were actually uploaded
+export async function verifyUploads(folder: string, paths: unknown): Promise<string[]> {
+  if (!Array.isArray(paths) || paths.some((p) => typeof p !== 'string' || !p.startsWith(`${folder}/`) || p.includes('..'))) {
+    throw new UploadError('Invalid photo reference');
+  }
+  if (paths.length === 0) return [];
+  const { data } = await db.storage.from(PENDING_BUCKET).list(folder, { limit: 1000 });
+  const present = new Set((data ?? []).map((o) => `${folder}/${o.name}`));
+  const missing = paths.filter((p) => !present.has(p));
+  if (missing.length) throw new UploadError('Some photos didn’t finish uploading — please try again');
+  return paths as string[];
+}
+
+export class UploadError extends Error {}
 
 export async function audit(
   actorId: string | null,

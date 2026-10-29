@@ -8,6 +8,7 @@ interface Props {
   percent: number;
   onChange: (value: { priceCents: number | null; percent: number }) => void;
   priceLabel?: string;
+  receiveLabel?: string;
 }
 
 const toDollars = (cents: number | null) => (cents == null ? '' : (cents / 100).toFixed(2));
@@ -15,9 +16,10 @@ const toDollars = (cents: number | null) => (cents == null ? '' : (cents / 100).
 // Price + voluntary "For Locale" donation, with a live breakdown.
 // Shared by the admin listing editor and (Phase 2) the public seller form.
 // Initial values are read once; give it a `key` to reset it for a different listing.
-export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabel = 'Asking price' }: Props) {
+export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabel = 'Asking price', receiveLabel = 'Seller receives' }: Props) {
   const [priceText, setPriceText] = useState(toDollars(priceCents));
-  const [custom, setCustom] = useState(!QUICK_PICK_PERCENTS.includes(percent));
+  // 0% (no donation) shows nothing selected; any other non-quick-pick value shows Custom
+  const [custom, setCustom] = useState(percent !== 0 && !QUICK_PICK_PERCENTS.includes(percent));
   const [percentText, setPercentText] = useState(String(percent));
 
   const setPrice = (text: string) => {
@@ -32,10 +34,12 @@ export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabe
     if (Number.isFinite(n) && n >= 0 && n <= 100) onChange({ priceCents, percent: Math.round(n * 100) / 100 });
   };
 
+  // Tapping the selected quick pick again clears it back to no donation
   const pick = (p: number) => {
+    const next = !custom && percent === p ? 0 : p;
     setCustom(false);
-    setPercentText(String(p));
-    onChange({ priceCents, percent: p });
+    setPercentText(String(next));
+    onChange({ priceCents, percent: next });
   };
 
   const { localeCents, payoutCents } = calcLocaleSplit(priceCents ?? 0, percent);
@@ -66,6 +70,7 @@ export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabe
               key={p}
               type="button"
               onClick={() => pick(p)}
+              aria-pressed={!custom && percent === p}
               className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
                 !custom && percent === p
                   ? 'bg-coffee-900 text-white border-coffee-900'
@@ -78,6 +83,7 @@ export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabe
           <button
             type="button"
             onClick={() => setCustom(true)}
+            aria-pressed={custom}
             className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
               custom ? 'bg-coffee-900 text-white border-coffee-900' : 'bg-white text-coffee-700 border-coffee-200 hover:bg-coffee-50'
             }`}
@@ -112,7 +118,7 @@ export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabe
           <span className="font-medium text-coffee-900">− {formatCents(localeCents)}</span>
         </div>
         <div className="flex justify-between pt-2 mt-1 border-t border-coffee-200">
-          <span className="font-semibold text-coffee-900">Seller receives</span>
+          <span className="font-semibold text-coffee-900">{receiveLabel}</span>
           <span className="font-semibold text-coffee-900">{formatCents(payoutCents)}</span>
         </div>
       </div>

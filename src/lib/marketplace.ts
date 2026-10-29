@@ -92,6 +92,14 @@ export const listingFieldsSchema = z.object({
 
 export const createListingSchema = listingFieldsSchema.extend({ seller: sellerSchema });
 
+// Public "Sell an item" form: no admin fields, at least one photo, explicit consent
+export const publicSubmissionSchema = listingFieldsSchema.omit({ admin_notes: true }).extend({
+  asking_price_cents: priceCents.min(1, 'Enter a price'),
+  seller: sellerSchema,
+  paths: z.array(z.string()).min(1, 'Add at least one photo').max(10, 'At most 10 photos'),
+  consent: z.literal(true, { errorMap: () => ({ message: 'Please confirm the agreement to continue' }) }),
+});
+
 export const updateListingSchema = listingFieldsSchema.partial().extend({ seller: sellerSchema.partial().optional() });
 
 export const listingActionSchema = z.object({

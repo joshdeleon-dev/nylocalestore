@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
 import {
-  audit, db, loadListing, publishImages,
-  IMAGE_TYPES, MAX_IMAGE_BYTES, MAX_IMAGES_PER_LISTING, PENDING_BUCKET, PUBLIC_BUCKET,
+  audit, createUploadUrls, db, loadListing, publishImages, verifyUploads, UploadError,
+  MAX_IMAGES_PER_LISTING, PENDING_BUCKET, PUBLIC_BUCKET,
 } from '@/lib/marketplaceServer';
 
 type Params = { params: Promise<{ id: string }> };
 
-// multipart/form-data with one or more `file` fields
+// Two steps, because photos upload from the browser straight to storage:
+//   { action: 'sign', files: [{ type, size }] }  → signed upload URLs
+//   { action: 'attach', paths: [...] }           → add the uploaded photos to the listing
 export async function POST(req: NextRequest, { params }: Params) {
   const auth = await requireRole(req, ADMIN_MANAGER);
   if (auth instanceof NextResponse) return auth;
@@ -16,35 +18,31 @@ export async function POST(req: NextRequest, { params }: Params) {
   const listing = await loadListing(id);
   if (!listing) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 });
 
-  const files = (await req.formData()).getAll('file').filter((f): f is File => f instanceof File);
-  if (files.length === 0) return NextResponse.json({ success: false, error: 'No file provided' }, { status: 400 });
-  if (listing.images.length + files.length > MAX_IMAGES_PER_LISTING) {
+  const body = await req.json().catch(() => ({}));
+  const folder = `listings/${id}`;
+  const count = body.action === 'sign' ? body.files?.length : body.paths?.length;
+  if (!count) return NextResponse.json({ success: false, error: 'No photos provided' }, { status: 400 });
+  if (listing.images.length + count > MAX_IMAGES_PER_LISTING) {
     return NextResponse.json({ success: false, error: `A listing can have at most ${MAX_IMAGES_PER_LISTING} photos` }, { status: 400 });
   }
-  for (const f of files) {
-    if (!IMAGE_TYPES[f.type]) return NextResponse.json({ success: false, error: `${f.name}: use JPG, PNG, WebP or HEIC` }, { status: 400 });
-    if (f.size > MAX_IMAGE_BYTES) return NextResponse.json({ success: false, error: `${f.name}: photos must be 10 MB or smaller` }, { status: 400 });
-  }
 
-  let sortOrder = Math.max(-1, ...listing.images.map((i: any) => i.sort_order)) + 1;
-  for (const f of files) {
-    const path = `listings/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${IMAGE_TYPES[f.type]}`;
-    const { error: upErr } = await db.storage
-      .from(PENDING_BUCKET)
-      // Short CDN cache so photos of an unpublished listing stop loading within minutes
-      .upload(path, new Uint8Array(await f.arrayBuffer()), { contentType: f.type, upsert: false, cacheControl: '300' });
-    if (upErr) return NextResponse.json({ success: false, error: upErr.message }, { status: 500 });
-
-    const { data: img, error } = await db
-      .from('marketplace_listing_images')
-      .insert({ listing_id: id, storage_path: path, sort_order: sortOrder++ })
-      .select()
-      .single();
-    if (error) {
-      await db.storage.from(PENDING_BUCKET).remove([path]);
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  try {
+    if (body.action === 'sign') {
+      return NextResponse.json({ success: true, uploads: await createUploadUrls(folder, body.files) });
     }
-    await audit(auth.id, 'listing', id, 'add_photo', null, { image_id: img.id });
+    if (body.action !== 'attach') return NextResponse.json({ success: false, error: 'Unknown action' }, { status: 400 });
+
+    const paths = await verifyUploads(folder, body.paths);
+    let sortOrder = Math.max(-1, ...listing.images.map((i: any) => i.sort_order)) + 1;
+    const { data: rows, error } = await db
+      .from('marketplace_listing_images')
+      .insert(paths.map((p) => ({ listing_id: id, storage_path: p, sort_order: sortOrder++ })))
+      .select('id');
+    if (error) throw error;
+    await audit(auth.id, 'listing', id, 'add_photo', null, { image_ids: rows.map((r) => r.id) });
+  } catch (e: any) {
+    const status = e instanceof UploadError ? 400 : 500;
+    return NextResponse.json({ success: false, error: e.message }, { status });
   }
 
   // Photos added to an already-public listing go public straight away
