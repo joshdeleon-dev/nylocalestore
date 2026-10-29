@@ -72,3 +72,30 @@ export interface MarketplaceAuditEntry {
   after_data: Record<string, unknown> | null;
   created_at: string;
 }
+
+export type ReservationStatus = 'requested' | 'confirmed' | 'completed' | 'canceled' | 'no_show';
+export type PickupType = 'locale' | 'other';
+export type ReservationAction = 'confirm' | 'complete' | 'cancel' | 'no_show';
+
+export interface MarketplaceReservation {
+  id: number;
+  listing_id: number;
+  buyer_name: string;
+  buyer_email: string;
+  buyer_phone: string;
+  pickup_type: PickupType;
+  pickup_street: string | null;
+  pickup_unit: string | null;
+  pickup_city: string | null;
+  pickup_state: string | null;
+  pickup_zip: string | null;
+  status: ReservationStatus;
+  canceled_by: 'buyer' | 'admin' | null;
+  cancel_reason: string | null;
+  admin_notes: string | null;
+  confirmed_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  listing?: Pick<MarketplaceListing, 'id' | 'title' | 'slug' | 'asking_price_cents' | 'status'> & { cover_url?: string | null };
+}

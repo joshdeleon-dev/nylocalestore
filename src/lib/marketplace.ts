@@ -2,7 +2,7 @@
 // status transitions and request validation.
 
 import { z } from 'zod';
-import { ListingAction, ListingCondition, ListingStatus } from '@/types/marketplace';
+import { ListingAction, ListingCondition, ListingStatus, ReservationAction, ReservationStatus } from '@/types/marketplace';
 
 // Must match the generated columns in migration 011:
 //   locale_amount_cents = round(price * percent / 100), payout = price - locale_amount
@@ -114,3 +114,84 @@ export const categorySchema = z.object({
 });
 
 export const firstZodError = (err: z.ZodError) => err.issues[0]?.message ?? 'Invalid input';
+
+// ── Reservations ─────────────────────────────────────────────────────────────
+
+export const MAX_OPEN_RESERVATIONS = 3;
+
+export const RESERVATION_STATUS_LABELS: Record<ReservationStatus, string> = {
+  requested: 'Requested',
+  confirmed: 'Confirmed',
+  completed: 'Completed',
+  canceled: 'Canceled',
+  no_show: 'No-show',
+};
+
+export const RESERVATION_STATUS_BADGE: Record<ReservationStatus, string> = {
+  requested: 'bg-amber-100 text-amber-800',
+  confirmed: 'bg-blue-100 text-blue-800',
+  completed: 'bg-green-100 text-green-800',
+  canceled: 'bg-gray-100 text-gray-600',
+  no_show: 'bg-red-100 text-red-700',
+};
+
+export const OPEN_RESERVATION_STATUSES: ReservationStatus[] = ['requested', 'confirmed'];
+
+// Admin actions allowed from each status (mirrors marketplace_update_reservation in migration 012)
+export const RESERVATION_ACTIONS: Record<ReservationStatus, ReservationAction[]> = {
+  requested: ['confirm', 'complete', 'cancel', 'no_show'],
+  confirmed: ['complete', 'cancel', 'no_show'],
+  completed: [],
+  canceled: [],
+  no_show: [],
+};
+
+export const RESERVATION_ACTION_RESULT: Record<ReservationAction, ReservationStatus> = {
+  confirm: 'confirmed',
+  complete: 'completed',
+  cancel: 'canceled',
+  no_show: 'no_show',
+};
+
+// Used for the per-buyer limit: case-insensitive email, digits-only US phone
+export const normalizeEmail = (email: string) => email.trim().toLowerCase();
+export const normalizePhone = (phone: string) => {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+};
+
+export const reservationSchema = z
+  .object({
+    slug: z.string().min(1),
+    buyer_name: z.string().trim().min(1, 'Your name is required').max(120),
+    buyer_email: z.string().trim().email('Enter a valid email').max(200),
+    buyer_phone: z.string().trim().max(40).refine((p) => normalizePhone(p).length >= 10, 'Enter a valid phone number'),
+    pickup_type: z.enum(['locale', 'other']),
+    pickup_street: z.string().trim().max(200).optional(),
+    pickup_unit: z.string().trim().max(50).optional(),
+    pickup_city: z.string().trim().max(100).optional(),
+    pickup_state: z.string().trim().max(50).optional(),
+    pickup_zip: z.string().trim().max(10).optional(),
+  })
+  .superRefine((r, ctx) => {
+    if (r.pickup_type !== 'other') return;
+    if (!r.pickup_street) ctx.addIssue({ code: 'custom', message: 'Street address is required', path: ['pickup_street'] });
+    if (!r.pickup_city) ctx.addIssue({ code: 'custom', message: 'City is required', path: ['pickup_city'] });
+    if (!r.pickup_state) ctx.addIssue({ code: 'custom', message: 'State is required', path: ['pickup_state'] });
+    if (!r.pickup_zip || !/^\d{5}(-\d{4})?$/.test(r.pickup_zip)) {
+      ctx.addIssue({ code: 'custom', message: 'Enter a valid ZIP code', path: ['pickup_zip'] });
+    }
+  });
+
+export const reservationActionSchema = z.object({
+  action: z.enum(['confirm', 'complete', 'cancel', 'no_show']).optional(),
+  reason: z.string().trim().max(1000).optional(),
+  admin_notes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export function formatPickup(r: { pickup_type: string; pickup_street?: string | null; pickup_unit?: string | null; pickup_city?: string | null; pickup_state?: string | null; pickup_zip?: string | null }) {
+  if (r.pickup_type === 'locale') return 'Pickup at the Locale';
+  const line1 = [r.pickup_street, r.pickup_unit].filter(Boolean).join(', ');
+  const line2 = [r.pickup_city, [r.pickup_state, r.pickup_zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return [line1, line2].filter(Boolean).join(' · ');
+}

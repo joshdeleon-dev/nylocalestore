@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Banknote, CalendarCheck, MapPin, Search } from 'lucide-react';
 import { PhotoGallery } from '@/components/marketplace/PhotoGallery';
+import { ReserveForm } from '@/components/marketplace/ReserveForm';
 import { CONDITION_LABELS, formatCents } from '@/lib/marketplace';
 import { getPublicListing } from '@/lib/marketplaceCatalog';
 import { marketplaceBase } from '@/lib/marketplaceSite';
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 }
 
 const STEPS = [
-  { icon: CalendarCheck, text: 'Request to reserve — we’ll hold it for you and set up a time.' },
+  { icon: CalendarCheck, text: 'Request to reserve — we’ll hold it for you and contact you to arrange pickup.' },
   { icon: Search, text: 'Inspect the item in person before you decide.' },
   { icon: Banknote, text: 'Pay at pickup. No online payment, no shipping.' },
 ];
@@ -58,12 +59,7 @@ export default async function ListingPage({ params }: { params: Params }) {
             {listing.is_reserved ? (
               <div className="rounded-xl bg-coffee-100 text-coffee-800 px-5 py-4 text-sm font-medium">This item is reserved by another buyer.</div>
             ) : (
-              <>
-                <button type="button" disabled className="w-full rounded-full bg-coffee-900 text-white font-medium py-3.5 opacity-50 cursor-not-allowed">
-                  Request to Reserve
-                </button>
-                <p className="text-xs text-coffee-500 text-center mt-2">Reservations open soon.</p>
-              </>
+              <ReserveForm slug={listing.slug} base={base} />
             )}
           </div>
 

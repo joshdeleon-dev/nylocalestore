@@ -214,8 +214,11 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
         ) : (
           <div className="flex-1 overflow-y-auto">
             {/* Status actions */}
-            {listing && (actions.length > 0 || listing.rejection_reason) && (
+            {listing && (actions.length > 0 || listing.rejection_reason || listing.status === 'reserved') && (
               <div className="px-6 py-4 border-b border-coffee-100 bg-coffee-50/60 space-y-3">
+                {listing.status === 'reserved' && (
+                  <p className="text-sm text-blue-800">This item is reserved by a buyer. Manage or release it from the <span className="font-medium">Reservations</span> tab.</p>
+                )}
                 {listing.rejection_reason && (
                   <p className="text-sm text-red-700"><span className="font-medium">Rejected:</span> {listing.rejection_reason}</p>
                 )}

@@ -1,5 +1,6 @@
 // Server-only marketplace helpers (service role). Never import from client components.
 
+import { createHash, randomBytes } from 'node:crypto';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { slugify } from '@/lib/marketplace';
 import { MarketplaceListingImage } from '@/types/marketplace';
@@ -132,4 +133,44 @@ export async function unpublishImages(listingId: number) {
 
   await db.storage.from(PUBLIC_BUCKET).remove(images.map((i) => i.public_path as string));
   await db.from('marketplace_listing_images').update({ public_path: null }).in('id', images.map((i) => i.id));
+}
+
+// Buyer's private reservation link: random token in the URL, only its hash in the database
+export function newReservationToken() {
+  const token = randomBytes(24).toString('base64url');
+  return { token, hash: hashReservationToken(token) };
+}
+
+export const hashReservationToken = (token: string) => createHash('sha256').update(token).digest('hex');
+
+// Load a reservation for the buyer's private page (no admin-only fields)
+export async function loadReservationByToken(token: string) {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
+  const { data } = await db
+    .from('marketplace_reservations')
+    .select('id, listing_id, buyer_name, pickup_type, pickup_street, pickup_unit, pickup_city, pickup_state, pickup_zip, status, canceled_by, created_at, confirmed_at, closed_at, listing:marketplace_listings(title, slug, asking_price_cents, images:marketplace_listing_images(public_path, sort_order))')
+    .eq('token_hash', hashReservationToken(token))
+    .maybeSingle();
+  if (!data) return null;
+  const listing: any = (data as any).listing;
+  const cover = [...(listing?.images ?? [])].filter((i: any) => i.public_path).sort((a: any, b: any) => a.sort_order - b.sort_order)[0];
+  return {
+    ...(data as any),
+    listing: listing && { title: listing.title, slug: listing.slug, price_cents: listing.asking_price_cents, cover_url: cover ? publicImageUrl(cover.public_path) : null },
+  };
+}
+
+export const RESERVATION_SELECT =
+  'id, listing_id, buyer_name, buyer_email, buyer_phone, pickup_type, pickup_street, pickup_unit, pickup_city, pickup_state, pickup_zip, status, canceled_by, cancel_reason, admin_notes, confirmed_at, closed_at, created_at, updated_at, listing:marketplace_listings(id, title, slug, asking_price_cents, status, images:marketplace_listing_images(storage_path, sort_order))';
+
+// Attach a signed cover thumbnail to each reservation's listing (admin views)
+export async function withReservationCovers(rows: any[]) {
+  const covers = rows.map((r) => [...(r.listing?.images ?? [])].sort((a: any, b: any) => a.sort_order - b.sort_order)[0]?.storage_path ?? null);
+  const paths = covers.filter(Boolean) as string[];
+  const { data } = paths.length ? await db.storage.from(PENDING_BUCKET).createSignedUrls(paths, 3600) : { data: [] as any[] };
+  const urlByPath = new Map((data ?? []).map((d: any) => [d.path, d.signedUrl]));
+  return rows.map((r, i) => {
+    const { images: _images, ...listing } = r.listing ?? {};
+    return { ...r, listing: r.listing ? { ...listing, cover_url: covers[i] ? urlByPath.get(covers[i]) ?? null : null } : null };
+  });
 }

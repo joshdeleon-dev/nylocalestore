@@ -4,12 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Plus, Search, Store, ImageOff, Pencil, Trash2, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ListingEditor } from './ListingEditor';
+import { ReservationsTab } from './ReservationsTab';
 import { STATUS_BADGE, STATUS_LABELS, formatCents } from '@/lib/marketplace';
 import { ListingStatus, MarketplaceCategory, MarketplaceListing } from '@/types/marketplace';
 
-type Tab = 'submissions' | 'listings' | 'categories';
+type Tab = 'submissions' | 'reservations' | 'listings' | 'categories';
 
-const TAB_STATUSES: Record<Exclude<Tab, 'categories'>, ListingStatus[]> = {
+const TAB_STATUSES: Record<Exclude<Tab, 'categories' | 'reservations'>, ListingStatus[]> = {
   submissions: ['submitted'],
   listings: ['published', 'unpublished', 'reserved', 'sold', 'rejected', 'withdrawn'],
 };
@@ -26,6 +27,7 @@ export function MarketplaceAdmin() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<number | 'new' | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
+  const [openReservationCount, setOpenReservationCount] = useState(0);
 
   const loadCategories = useCallback(async () => {
     const res = await fetch('/api/admin/marketplace/categories');
@@ -34,7 +36,7 @@ export function MarketplaceAdmin() {
   }, []);
 
   const loadListings = useCallback(async () => {
-    if (tab === 'categories') return;
+    if (tab === 'categories' || tab === 'reservations') return;
     setLoading(true);
     const statuses = statusFilter ? [statusFilter] : TAB_STATUSES[tab];
     const params = new URLSearchParams({ status: statuses.join(',') });
@@ -52,22 +54,28 @@ export function MarketplaceAdmin() {
     if (res.ok) setSubmissionCount(json.data.length);
   }, []);
 
-  useEffect(() => { loadCategories(); loadSubmissionCount(); }, [loadCategories, loadSubmissionCount]);
+  const loadReservationCount = useCallback(async () => {
+    const res = await fetch('/api/admin/marketplace/reservations?view=open');
+    const json = await res.json();
+    if (res.ok) setOpenReservationCount(json.data.length);
+  }, []);
+
+  useEffect(() => { loadCategories(); loadSubmissionCount(); loadReservationCount(); }, [loadCategories, loadSubmissionCount, loadReservationCount]);
   useEffect(() => {
     const t = setTimeout(loadListings, search ? 250 : 0);
     return () => clearTimeout(t);
   }, [loadListings, search]);
 
-  const refreshAll = () => { loadListings(); loadSubmissionCount(); loadCategories(); };
+  const refreshAll = () => { loadListings(); loadSubmissionCount(); loadCategories(); loadReservationCount(); };
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><Store className="w-6 h-6" /> Marketplace</h1>
-          <p className="text-sm text-coffee-500 mt-1">Review seller submissions and manage listings for shop.nylocalestore.com</p>
+          <p className="text-sm text-coffee-500 mt-1">Review submissions, manage listings and reservations for shop.nylocalestore.com</p>
         </div>
-        {tab !== 'categories' && (
+        {(tab === 'submissions' || tab === 'listings') && (
           <button onClick={() => setEditing('new')} className="btn btn-primary gap-2">
             <Plus className="w-4 h-4" /> New listing
           </button>
@@ -75,7 +83,7 @@ export function MarketplaceAdmin() {
       </div>
 
       <div className="flex gap-1 border-b border-coffee-200">
-        {(['submissions', 'listings', 'categories'] as Tab[]).map((t) => (
+        {(['submissions', 'reservations', 'listings', 'categories'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => { setTab(t); setStatusFilter(''); }}
@@ -87,12 +95,17 @@ export function MarketplaceAdmin() {
             {t === 'submissions' && submissionCount > 0 && (
               <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">{submissionCount}</span>
             )}
+            {t === 'reservations' && openReservationCount > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">{openReservationCount}</span>
+            )}
           </button>
         ))}
       </div>
 
       {tab === 'categories' ? (
         <CategoryManager categories={categories} onChanged={loadCategories} />
+      ) : tab === 'reservations' ? (
+        <ReservationsTab onOpenListing={(id) => setEditing(id)} onChanged={refreshAll} />
       ) : (
         <>
           <div className="flex flex-wrap gap-3">

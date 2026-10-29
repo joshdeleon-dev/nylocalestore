@@ -9,6 +9,7 @@
 //
 // Samples are tied to the seller samples@nylocalestore.test and tagged in admin notes.
 
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
@@ -123,6 +124,8 @@ async function removeSamples() {
       await db.storage.from('marketplace-public').remove(paths);
     }
     await db.from('marketplace_audit_log').delete().eq('entity_type', 'listing').eq('entity_id', String(l.id));
+    const { data: res } = await db.from('marketplace_reservations').select('id').eq('listing_id', l.id);
+    for (const r of res ?? []) await db.from('marketplace_audit_log').delete().eq('entity_type', 'reservation').eq('entity_id', String(r.id));
   }
   await db.from('marketplace_listings').delete().in('seller_id', sellerIds);
   await db.from('marketplace_sellers').delete().in('id', sellerIds);
@@ -221,6 +224,23 @@ async function main() {
           .from('marketplace_listing_images')
           .insert({ listing_id: listing.id, storage_path: storagePath, public_path: publicPath, sort_order: i });
         if (imgErr) throw imgErr;
+      }
+
+      // A reserved sample needs a real reservation behind it so staff can manage/release it
+      if (status === 'reserved') {
+        const { error: resErr } = await db.from('marketplace_reservations').insert({
+          listing_id: listing.id,
+          buyer_name: 'Sample Buyer',
+          buyer_email: 'buyer.sample@nylocalestore.test',
+          buyer_phone: '(000) 000-0001',
+          buyer_email_norm: 'buyer.sample@nylocalestore.test',
+          buyer_phone_norm: '0000000001',
+          pickup_type: 'locale',
+          token_hash: createHash('sha256').update(randomBytes(24)).digest('hex'),
+          admin_notes: SAMPLE_NOTE,
+          created_at: publishedAt,
+        });
+        if (resErr) throw resErr;
       }
 
       await db.from('marketplace_audit_log').insert({
