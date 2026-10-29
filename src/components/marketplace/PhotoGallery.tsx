@@ -2,10 +2,12 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, ImageOff } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Expand, ImageOff } from 'lucide-react';
+import { ImageLightbox } from './ImageLightbox';
 
 export function PhotoGallery({ images, title, reserved }: { images: string[]; title: string; reserved: boolean }) {
   const [index, setIndex] = useState(0);
+  const [zoomed, setZoomed] = useState(false);
 
   if (images.length === 0) {
     return (
@@ -20,14 +22,24 @@ export function PhotoGallery({ images, title, reserved }: { images: string[]; ti
   return (
     <div className="space-y-3">
       <div className="relative aspect-square rounded-2xl overflow-hidden bg-coffee-100">
-        <Image
-          src={images[index]}
-          alt={`${title} — photo ${index + 1} of ${images.length}`}
-          fill
-          priority
-          sizes="(min-width: 1024px) 50vw, 100vw"
-          className={`object-cover ${reserved ? 'grayscale opacity-60' : ''}`}
-        />
+        <button
+          type="button"
+          onClick={() => setZoomed(true)}
+          className="group absolute inset-0 w-full h-full cursor-zoom-in focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-coffee-300"
+          aria-label={`Enlarge photo ${index + 1} of ${images.length}`}
+        >
+          <Image
+            src={images[index]}
+            alt={`${title} — photo ${index + 1} of ${images.length}`}
+            fill
+            priority
+            sizes="(min-width: 1024px) 50vw, 100vw"
+            className={`object-cover ${reserved ? 'grayscale opacity-60' : ''}`}
+          />
+          <span className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 text-coffee-900 flex items-center justify-center shadow opacity-80 group-hover:opacity-100 transition-opacity">
+            <Expand className="w-4 h-4" />
+          </span>
+        </button>
         {reserved && (
           <span className="absolute top-4 left-4 rounded-full bg-coffee-900 text-white text-xs font-semibold uppercase tracking-wider px-3.5 py-1.5">
             Reserved
@@ -45,6 +57,9 @@ export function PhotoGallery({ images, title, reserved }: { images: string[]; ti
           </>
         )}
       </div>
+      {zoomed && (
+        <ImageLightbox images={images} index={index} title={title} onIndexChange={setIndex} onClose={() => setZoomed(false)} />
+      )}
       {images.length > 1 && (
         <div className="flex gap-2 overflow-x-auto scrollbar-none">
           {images.map((src, i) => (

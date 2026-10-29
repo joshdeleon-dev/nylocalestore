@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Upload, Trash2, Star, Loader2, History, Phone, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ImageLightbox } from './ImageLightbox';
 import { LocaleSplitCalculator } from './LocaleSplitCalculator';
 import { checkPhoto, uploadPhotos } from '@/lib/marketplaceUpload';
 import {
@@ -56,6 +57,7 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
   const [uploading, setUploading] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [zoomIndex, setZoomIndex] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const applyListing = (l: MarketplaceListing) => {
@@ -264,8 +266,15 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {listing.images.map((img, i) => (
                         <div key={img.id} className="group relative aspect-square rounded-lg overflow-hidden bg-coffee-100 border border-coffee-100">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={img.url} alt="" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setZoomIndex(i)}
+                            className="block w-full h-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-coffee-500"
+                            aria-label={`Enlarge photo ${i + 1}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={img.url} alt="" className="w-full h-full object-cover" />
+                          </button>
                           {i === 0 && <span className="absolute top-1 left-1 text-[10px] font-semibold bg-coffee-900 text-white rounded px-1.5 py-0.5">Cover</span>}
                           {!readOnly && (
                             <div className="absolute inset-x-0 bottom-0 flex justify-end gap-1 p-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
@@ -388,6 +397,15 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
           </div>
         )}
       </div>
+      {zoomIndex != null && listing?.images?.length ? (
+        <ImageLightbox
+          images={listing.images.map((img) => img.url ?? '').filter(Boolean)}
+          index={Math.min(zoomIndex, listing.images.length - 1)}
+          title={listing.title}
+          onIndexChange={setZoomIndex}
+          onClose={() => setZoomIndex(null)}
+        />
+      ) : null}
     </div>
   );
 }
