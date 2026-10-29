@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { ImageLightbox } from './ImageLightbox';
 import { LocaleSplitCalculator } from './LocaleSplitCalculator';
 import { checkPhoto, uploadPhotos } from '@/lib/marketplaceUpload';
+import { PaymentCheckboxes, PaymentRow } from './PaymentCheckboxes';
 import {
   ALLOWED_ACTIONS, CONDITION_LABELS, STATUS_BADGE, STATUS_LABELS, formatCents,
 } from '@/lib/marketplace';
@@ -26,6 +27,7 @@ const ACTION_LABELS: Record<ListingAction, string> = {
   reject: 'Reject',
   withdraw: 'Withdraw',
   reopen: 'Reopen for review',
+  release: 'Return to sale',
 };
 
 const ACTION_STYLE: Record<ListingAction, string> = {
@@ -34,6 +36,7 @@ const ACTION_STYLE: Record<ListingAction, string> = {
   reject: 'btn-secondary text-red-600 hover:bg-red-50',
   withdraw: 'btn-secondary',
   reopen: 'btn-secondary',
+  release: 'btn-secondary',
 };
 
 const emptyForm = {
@@ -58,6 +61,7 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
+  const [payment, setPayment] = useState<PaymentRow | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const applyListing = (l: MarketplaceListing) => {
@@ -79,6 +83,13 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
     const json = await res.json();
     if (!res.ok) { toast.error(json.error || 'Failed to load listing'); onClose(); return; }
     applyListing(json.data);
+    // Reserved / paid / sold items get the payment section
+    if (['reserved', 'paid', 'sold'].includes(json.data.status)) {
+      const pay = await fetch(`/api/admin/marketplace/payments/${listingIdToLoad}`).then((r) => r.json()).catch(() => null);
+      setPayment(pay?.data ?? null);
+    } else {
+      setPayment(null);
+    }
     setHistory(json.history ?? []);
     setLoading(false);
   };
@@ -184,7 +195,7 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
   };
 
   const actions = listing ? ALLOWED_ACTIONS[listing.status] : [];
-  const readOnly = listing?.status === 'sold';
+  const readOnly = listing?.status === 'sold' || listing?.status === 'paid';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -217,7 +228,10 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
             {listing && (actions.length > 0 || listing.rejection_reason || listing.status === 'reserved') && (
               <div className="px-6 py-4 border-b border-coffee-100 bg-coffee-50/60 space-y-3">
                 {listing.status === 'reserved' && (
-                  <p className="text-sm text-blue-800">This item is reserved by a buyer. Manage or release it from the <span className="font-medium">Reservations</span> tab.</p>
+                  <p className="text-sm text-blue-800">
+                    This item is reserved. Manage the reservation from the <span className="font-medium">Reservations</span> tab.
+                    “Return to sale” is only for an item whose pickup was completed but never paid.
+                  </p>
                 )}
                 {listing.rejection_reason && (
                   <p className="text-sm text-red-700"><span className="font-medium">Rejected:</span> {listing.rejection_reason}</p>
@@ -247,6 +261,21 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
                   </div>
                 )}
               </div>
+            )}
+
+            {payment && (
+              <section className="px-6 py-4 border-b border-coffee-100 space-y-3">
+                <h3 className="text-sm font-semibold text-gray-900">Payment</h3>
+                <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                  <div><dt className="text-xs text-coffee-500">Asking price</dt><dd className="font-medium">{formatCents(payment.sale?.sale_price_cents ?? payment.asking_price_cents)}</dd></div>
+                  <div><dt className="text-xs text-coffee-500">For Locale %</dt><dd className="font-medium">{Number(payment.sale?.locale_percent ?? payment.locale_percent)}%</dd></div>
+                  <div><dt className="text-xs text-coffee-500">For Locale</dt><dd className="font-medium">{formatCents(payment.sale?.locale_amount_cents ?? payment.locale_amount_cents)}</dd></div>
+                  <div><dt className="text-xs text-coffee-500">Pay seller</dt><dd className="font-semibold">{formatCents(payment.sale?.seller_payout_cents ?? payment.seller_payout_cents)}</dd></div>
+                </dl>
+                {payment.buyer && <p className="text-xs text-coffee-500">Buyer: {payment.buyer.buyer_name} · {payment.buyer.buyer_phone}</p>}
+                <PaymentCheckboxes row={payment} onChanged={(updated) => { setPayment(updated); onChanged(); if (id) load(id); }} />
+                {payment.sale && <p className="text-xs text-coffee-400">Amounts are locked to what they were when the buyer paid.</p>}
+              </section>
             )}
 
             <form id="listing-form" onSubmit={save} className="px-6 py-5 space-y-6">

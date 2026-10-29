@@ -46,8 +46,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const before = await loadListing(id);
   if (!before) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 });
-  if (before.status === 'sold') {
-    return NextResponse.json({ success: false, error: 'Sold listings can’t be edited' }, { status: 409 });
+  // Paid items are locked to their sale snapshot; untick "Buyer has paid" to edit
+  if (before.status === 'sold' || before.status === 'paid') {
+    return NextResponse.json({ success: false, error: 'Paid and sold listings can’t be edited — untick “Buyer has paid” first' }, { status: 409 });
   }
 
   if (seller && Object.keys(seller).length) {

@@ -4,6 +4,7 @@ export type ListingStatus =
   | 'submitted'
   | 'published'
   | 'reserved'
+  | 'paid'
   | 'sold'
   | 'rejected'
   | 'withdrawn'
@@ -11,7 +12,7 @@ export type ListingStatus =
 
 export type ListingCondition = 'new' | 'like_new' | 'good' | 'fair' | 'poor';
 
-export type ListingAction = 'publish' | 'unpublish' | 'reject' | 'withdraw' | 'reopen';
+export type ListingAction = 'publish' | 'unpublish' | 'reject' | 'withdraw' | 'reopen' | 'release';
 
 export interface MarketplaceCategory {
   id: number;
@@ -99,3 +100,22 @@ export interface MarketplaceReservation {
   updated_at: string;
   listing?: Pick<MarketplaceListing, 'id' | 'title' | 'slug' | 'asking_price_cents' | 'status'> & { cover_url?: string | null };
 }
+
+// A completed sale: snapshot taken when "Buyer has paid" was ticked
+export interface MarketplaceSale {
+  id: number;
+  listing_id: number;
+  reservation_id: number | null;
+  sale_price_cents: number;
+  locale_percent: number;
+  locale_amount_cents: number;
+  seller_payout_cents: number;
+  buyer_paid_at: string;
+  buyer_paid_by: string | null;
+  buyer_paid_by_name?: string | null;
+  seller_paid_at: string | null;
+  seller_paid_by: string | null;
+  seller_paid_by_name?: string | null;
+}
+
+export type PaymentField = 'buyer_paid' | 'seller_paid';

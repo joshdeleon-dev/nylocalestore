@@ -26,6 +26,7 @@ export const STATUS_LABELS: Record<ListingStatus, string> = {
   submitted: 'Submitted',
   published: 'Published',
   reserved: 'Reserved',
+  paid: 'Buyer paid',
   sold: 'Sold',
   rejected: 'Rejected',
   withdrawn: 'Withdrawn',
@@ -36,20 +37,23 @@ export const STATUS_BADGE: Record<ListingStatus, string> = {
   submitted: 'bg-amber-100 text-amber-800',
   published: 'bg-green-100 text-green-800',
   reserved: 'bg-blue-100 text-blue-800',
+  paid: 'bg-purple-100 text-purple-800',
   sold: 'bg-coffee-200 text-coffee-800',
   rejected: 'bg-red-100 text-red-700',
   withdrawn: 'bg-gray-100 text-gray-600',
   unpublished: 'bg-gray-100 text-gray-700',
 };
 
-// Which admin actions are allowed from each status (reserved/sold are handled in later phases)
+// Which admin actions are allowed from each status. Reserved items are normally released from the
+// Reservations tab; 'release' covers a completed pickup where the buyer never paid.
 export const ALLOWED_ACTIONS: Record<ListingStatus, ListingAction[]> = {
   submitted: ['publish', 'reject', 'withdraw'],
   published: ['unpublish', 'withdraw'],
   unpublished: ['publish', 'withdraw'],
   rejected: ['reopen'],
   withdrawn: ['reopen'],
-  reserved: [],
+  reserved: ['release'],
+  paid: [],
   sold: [],
 };
 
@@ -59,6 +63,7 @@ export const ACTION_RESULT: Record<ListingAction, ListingStatus> = {
   reject: 'rejected',
   withdraw: 'withdrawn',
   reopen: 'submitted',
+  release: 'published',
 };
 
 export const formatCents = (cents: number) =>
@@ -103,7 +108,7 @@ export const publicSubmissionSchema = listingFieldsSchema.omit({ admin_notes: tr
 export const updateListingSchema = listingFieldsSchema.partial().extend({ seller: sellerSchema.partial().optional() });
 
 export const listingActionSchema = z.object({
-  action: z.enum(['publish', 'unpublish', 'reject', 'withdraw', 'reopen']),
+  action: z.enum(['publish', 'unpublish', 'reject', 'withdraw', 'reopen', 'release']),
   reason: z.string().trim().max(1000).optional(),
 });
 

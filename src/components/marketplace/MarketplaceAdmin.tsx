@@ -5,14 +5,16 @@ import { Plus, Search, Store, ImageOff, Pencil, Trash2, Check, X } from 'lucide-
 import toast from 'react-hot-toast';
 import { ListingEditor } from './ListingEditor';
 import { ReservationsTab } from './ReservationsTab';
+import { PaymentsTab } from './PaymentsTab';
+import { ReportSummary, ReportsTab, StatTile, nyToday } from './ReportsTab';
 import { STATUS_BADGE, STATUS_LABELS, formatCents } from '@/lib/marketplace';
 import { ListingStatus, MarketplaceCategory, MarketplaceListing } from '@/types/marketplace';
 
-type Tab = 'submissions' | 'reservations' | 'listings' | 'categories';
+type Tab = 'submissions' | 'reservations' | 'payments' | 'listings' | 'categories' | 'reports';
 
-const TAB_STATUSES: Record<Exclude<Tab, 'categories' | 'reservations'>, ListingStatus[]> = {
+const TAB_STATUSES: Record<'submissions' | 'listings', ListingStatus[]> = {
   submissions: ['submitted'],
-  listings: ['published', 'unpublished', 'reserved', 'sold', 'rejected', 'withdrawn'],
+  listings: ['published', 'unpublished', 'reserved', 'paid', 'sold', 'rejected', 'withdrawn'],
 };
 
 type ListingRow = MarketplaceListing & { image_count: number };
@@ -28,6 +30,7 @@ export function MarketplaceAdmin() {
   const [editing, setEditing] = useState<number | 'new' | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [openReservationCount, setOpenReservationCount] = useState(0);
+  const [overview, setOverview] = useState<ReportSummary | null>(null);
 
   const loadCategories = useCallback(async () => {
     const res = await fetch('/api/admin/marketplace/categories');
@@ -36,7 +39,7 @@ export function MarketplaceAdmin() {
   }, []);
 
   const loadListings = useCallback(async () => {
-    if (tab === 'categories' || tab === 'reservations') return;
+    if (tab !== 'submissions' && tab !== 'listings') return;
     setLoading(true);
     const statuses = statusFilter ? [statusFilter] : TAB_STATUSES[tab];
     const params = new URLSearchParams({ status: statuses.join(',') });
@@ -60,13 +63,20 @@ export function MarketplaceAdmin() {
     if (res.ok) setOpenReservationCount(json.data.length);
   }, []);
 
-  useEffect(() => { loadCategories(); loadSubmissionCount(); loadReservationCount(); }, [loadCategories, loadSubmissionCount, loadReservationCount]);
+  // Headline numbers: current balances plus this month's sales
+  const loadOverview = useCallback(async () => {
+    const res = await fetch(`/api/admin/marketplace/reports?from=${nyToday().slice(0, 8)}01&to=${nyToday()}`);
+    const json = await res.json();
+    if (res.ok) setOverview(json.summary);
+  }, []);
+
+  useEffect(() => { loadCategories(); loadSubmissionCount(); loadReservationCount(); loadOverview(); }, [loadCategories, loadSubmissionCount, loadReservationCount, loadOverview]);
   useEffect(() => {
     const t = setTimeout(loadListings, search ? 250 : 0);
     return () => clearTimeout(t);
   }, [loadListings, search]);
 
-  const refreshAll = () => { loadListings(); loadSubmissionCount(); loadCategories(); loadReservationCount(); };
+  const refreshAll = () => { loadListings(); loadSubmissionCount(); loadCategories(); loadReservationCount(); loadOverview(); };
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -82,18 +92,30 @@ export function MarketplaceAdmin() {
         )}
       </div>
 
-      <div className="flex gap-1 border-b border-coffee-200">
-        {(['submissions', 'reservations', 'listings', 'categories'] as Tab[]).map((t) => (
+      {overview && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatTile label="Pending submissions" value={String(overview.pending_submissions)} hint={`${overview.live_listings} live listing${overview.live_listings === 1 ? '' : 's'}`} />
+          <StatTile label="Open reservations" value={String(overview.open_reservations)} hint={`${overview.awaiting_buyer_payment} awaiting buyer payment`} />
+          <StatTile label="Owed to sellers" value={formatCents(overview.owed_to_sellers_cents)} hint={`${overview.awaiting_payout_count} awaiting payout`} tone={overview.owed_to_sellers_cents > 0 ? 'warn' : 'default'} />
+          <StatTile label="For Locale this month" value={formatCents(overview.locale_total_cents)} hint={`${formatCents(overview.total_sales_cents)} in sales`} tone="accent" />
+        </div>
+      )}
+
+      <div className="flex gap-1 border-b border-coffee-200 overflow-x-auto scrollbar-none">
+        {(['submissions', 'reservations', 'payments', 'listings', 'categories', 'reports'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => { setTab(t); setStatusFilter(''); }}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize whitespace-nowrap ${
               tab === t ? 'border-coffee-900 text-coffee-900' : 'border-transparent text-coffee-500 hover:text-coffee-800'
             }`}
           >
             {t}
             {t === 'submissions' && submissionCount > 0 && (
               <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">{submissionCount}</span>
+            )}
+            {t === 'payments' && (overview?.awaiting_payout_count ?? 0) > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-purple-100 text-purple-800 text-xs font-semibold">{overview!.awaiting_payout_count}</span>
             )}
             {t === 'reservations' && openReservationCount > 0 && (
               <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">{openReservationCount}</span>
@@ -106,6 +128,10 @@ export function MarketplaceAdmin() {
         <CategoryManager categories={categories} onChanged={loadCategories} />
       ) : tab === 'reservations' ? (
         <ReservationsTab onOpenListing={(id) => setEditing(id)} onChanged={refreshAll} />
+      ) : tab === 'payments' ? (
+        <PaymentsTab onOpenListing={(id) => setEditing(id)} onChanged={refreshAll} />
+      ) : tab === 'reports' ? (
+        <ReportsTab />
       ) : (
         <>
           <div className="flex flex-wrap gap-3">

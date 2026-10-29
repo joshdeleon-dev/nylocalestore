@@ -42,9 +42,20 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
   if (action === 'reopen') updates.rejection_reason = null;
 
+  if (action === 'release') {
+    const { count } = await db
+      .from('marketplace_reservations')
+      .select('id', { count: 'exact', head: true })
+      .eq('listing_id', id)
+      .in('status', ['requested', 'confirmed']);
+    if (count) {
+      return NextResponse.json({ success: false, error: 'This item has an open reservation — cancel it from the Reservations tab' }, { status: 409 });
+    }
+  }
+
   try {
     // Images go public before the listing does, and leave public before it's hidden
-    if (action === 'publish') await publishImages(id);
+    if (action === 'publish' || action === 'release') await publishImages(id);
     else await unpublishImages(id);
   } catch (e: any) {
     return NextResponse.json({ success: false, error: `Image update failed: ${e.message}` }, { status: 500 });

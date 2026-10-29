@@ -174,3 +174,63 @@ export async function withReservationCovers(rows: any[]) {
     return { ...r, listing: r.listing ? { ...listing, cover_url: covers[i] ? urlByPath.get(covers[i]) ?? null : null } : null };
   });
 }
+
+// ── Payments ────────────────────────────────────────────────────────────────
+
+export type PaymentView = 'awaiting_buyer' | 'awaiting_payout' | 'sold';
+
+const PAYMENT_VIEW_STATUS: Record<PaymentView, string> = { awaiting_buyer: 'reserved', awaiting_payout: 'paid', sold: 'sold' };
+
+const PAYMENT_SELECT =
+  'id, title, slug, status, asking_price_cents, locale_percent, locale_amount_cents, seller_payout_cents, updated_at, seller:marketplace_sellers(name, phone, email), category:marketplace_categories(name), images:marketplace_listing_images(storage_path, sort_order), sale:marketplace_sales(*), reservations:marketplace_reservations(id, buyer_name, buyer_phone, buyer_email, status, created_at)';
+
+async function userNames(ids: (string | null | undefined)[]) {
+  const unique = [...new Set(ids.filter(Boolean))] as string[];
+  if (!unique.length) return new Map<string, string>();
+  const { data } = await db.from('users').select('id, full_name').in('id', unique);
+  return new Map((data ?? []).map((u) => [u.id, u.full_name as string]));
+}
+
+// Shape listings for the Payments views: cover, latest buyer, and the sale (if paid) with who ticked it
+async function shapePaymentRows(rows: any[]) {
+  const covers = rows.map((r) => [...(r.images ?? [])].sort((a: any, b: any) => a.sort_order - b.sort_order)[0]?.storage_path ?? null);
+  const paths = covers.filter(Boolean) as string[];
+  const { data: signed } = paths.length ? await db.storage.from(PENDING_BUCKET).createSignedUrls(paths, 3600) : { data: [] as any[] };
+  const urlByPath = new Map((signed ?? []).map((d: any) => [d.path, d.signedUrl]));
+  const sales = rows.map((r) => (Array.isArray(r.sale) ? r.sale[0] : r.sale) ?? null);
+  const names = await userNames(sales.flatMap((s) => [s?.buyer_paid_by, s?.seller_paid_by]));
+
+  return rows.map((r, i) => {
+    const { images: _images, reservations, sale: _sale, ...listing } = r;
+    const buyer = [...(reservations ?? [])]
+      .filter((x: any) => x.status !== 'canceled' && x.status !== 'no_show')
+      .sort((a: any, b: any) => b.created_at.localeCompare(a.created_at))[0] ?? null;
+    const sale = sales[i];
+    return {
+      ...listing,
+      cover_url: covers[i] ? urlByPath.get(covers[i]) ?? null : null,
+      buyer,
+      sale: sale && {
+        ...sale,
+        buyer_paid_by_name: sale.buyer_paid_by ? names.get(sale.buyer_paid_by) ?? null : null,
+        seller_paid_by_name: sale.seller_paid_by ? names.get(sale.seller_paid_by) ?? null : null,
+      },
+    };
+  });
+}
+
+export async function loadPaymentRows(view: PaymentView) {
+  const { data, error } = await db
+    .from('marketplace_listings')
+    .select(PAYMENT_SELECT)
+    .eq('status', PAYMENT_VIEW_STATUS[view])
+    .order('updated_at', { ascending: view !== 'sold' })
+    .limit(500);
+  if (error) throw error;
+  return shapePaymentRows(data ?? []);
+}
+
+export async function loadPaymentRow(listingId: number) {
+  const { data } = await db.from('marketplace_listings').select(PAYMENT_SELECT).eq('id', listingId).maybeSingle();
+  return data ? (await shapePaymentRows([data]))[0] : null;
+}

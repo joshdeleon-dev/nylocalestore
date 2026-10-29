@@ -34,7 +34,8 @@ const commons = (file) => `https://commons.wikimedia.org/wiki/File:${file}`;
 const thumb = (hashPath, file) => `https://upload.wikimedia.org/wikipedia/commons/thumb/${hashPath}/${file}/1280px-${file}`;
 const original = (hashPath, file) => `https://upload.wikimedia.org/wikipedia/commons/${hashPath}/${file}`;
 
-// status: published unless noted. Prices in cents. Each photo: { url, source (Commons page), license }
+// status: published unless noted ('reserved' / 'paid' / 'sold' also get a sample reservation, and
+// paid / sold a sample sale, so the Reservations, Payments and Reports tabs have data). Prices in cents. Each photo: { url, source (Commons page), license }
 const SAMPLES = {
   furniture: [
     { title: 'Antique Mahogany Secretary Desk', condition: 'good', price: 45000, pct: 15,
@@ -72,7 +73,7 @@ const SAMPLES = {
       photos: [{ url: thumb('4/4d', 'Victoria_Signature_Series_Skillet%2C_2023.jpg'), source: commons('Victoria_Signature_Series_Skillet,_2023.jpg'), license: 'CC0' }] },
   ],
   'books-media': [
-    { title: 'Antique Hardcover Books (Set of 4)', condition: 'fair', price: 3500, pct: 10,
+    { title: 'Antique Hardcover Books (Set of 4)', condition: 'fair', price: 3500, pct: 10, status: 'sold',
       description: 'Four old cloth-bound hardcovers with gilt lettering — great for a bookshelf display. Spines are worn; pages intact.',
       photos: [{ url: thumb('c/ca', 'Old_Books_01.JPG'), source: commons('Old_Books_01.JPG'), license: 'CC0' }] },
     { title: 'Vinyl Record Collection (30 LPs)', condition: 'good', price: 6000, pct: 5,
@@ -83,7 +84,7 @@ const SAMPLES = {
       ] },
   ],
   'kids-baby': [
-    { title: 'Wooden Rocking Horse', condition: 'like_new', price: 5500, pct: 20,
+    { title: 'Wooden Rocking Horse', condition: 'like_new', price: 5500, pct: 20, status: 'paid',
       description: 'Solid wood rocking horse for toddlers, with handles and a wide, stable base. Smooth finish, no splinters.',
       photos: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/20241220_172041_DM_Drogerie_Markt%2C_Nowa_Sukcesja_shopping_mall%2C_Al._Politechniki_1%2C_%C5%81%C3%B3d%C5%BA%2C_Poland._rocking_horse_for_children._Not_for_sale._Shop_equipment.jpg/1280px-thumbnail.jpg',
         source: commons('20241220_172041_DM_Drogerie_Markt,_Nowa_Sukcesja_shopping_mall,_Al._Politechniki_1,_Łódź,_Poland._rocking_horse_for_children._Not_for_sale._Shop_equipment.jpg'), license: 'Public domain' }] },
@@ -213,7 +214,8 @@ async function main() {
           .upload(storagePath, bytes, { contentType: 'image/jpeg', cacheControl: '300', upsert: true });
         if (upErr) throw upErr;
         let publicPath = null;
-        if (status !== 'submitted') {
+        // Only items visible in the catalog have public photos
+        if (['published', 'reserved'].includes(status)) {
           const { error: cpErr } = await db.storage
             .from('marketplace-pending')
             .copy(storagePath, storagePath, { destinationBucket: 'marketplace-public' });
@@ -226,9 +228,9 @@ async function main() {
         if (imgErr) throw imgErr;
       }
 
-      // A reserved sample needs a real reservation behind it so staff can manage/release it
-      if (status === 'reserved') {
-        const { error: resErr } = await db.from('marketplace_reservations').insert({
+      // Reserved / paid / sold samples need a real reservation behind them
+      if (['reserved', 'paid', 'sold'].includes(status)) {
+        const { data: reservation, error: resErr } = await db.from('marketplace_reservations').insert({
           listing_id: listing.id,
           buyer_name: 'Sample Buyer',
           buyer_email: 'buyer.sample@nylocalestore.test',
@@ -239,8 +241,25 @@ async function main() {
           token_hash: createHash('sha256').update(randomBytes(24)).digest('hex'),
           admin_notes: SAMPLE_NOTE,
           created_at: publishedAt,
-        });
+          status: status === 'reserved' ? 'requested' : 'completed',
+          closed_at: status === 'reserved' ? null : publishedAt,
+        }).select('id').single();
         if (resErr) throw resErr;
+
+        if (status !== 'reserved') {
+          const paidAt = new Date(new Date(publishedAt).getTime() + 2 * 3_600_000).toISOString();
+          const { error: saleErr } = await db.from('marketplace_sales').insert({
+            listing_id: listing.id,
+            reservation_id: reservation.id,
+            sale_price_cents: s.price,
+            locale_percent: s.pct,
+            locale_amount_cents: listing.locale_amount_cents,
+            seller_payout_cents: listing.seller_payout_cents,
+            buyer_paid_at: paidAt,
+            seller_paid_at: status === 'sold' ? new Date(new Date(paidAt).getTime() + 3_600_000).toISOString() : null,
+          });
+          if (saleErr) throw saleErr;
+        }
       }
 
       await db.from('marketplace_audit_log').insert({
