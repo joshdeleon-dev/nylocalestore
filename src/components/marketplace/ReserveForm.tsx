@@ -6,6 +6,10 @@ import { Loader2, MapPin, Truck } from 'lucide-react';
 import { MAX_OPEN_RESERVATIONS } from '@/lib/marketplace';
 import { PickupType } from '@/types/marketplace';
 
+// Pickup choice (Locale / Other address) is hidden for now: everything is picked up at the
+// Locale. The database and API still support 'other' — set this to true to bring the options back.
+const SHOW_PICKUP_OPTIONS = false;
+
 const emptyForm = {
   buyer_name: '', buyer_email: '', buyer_phone: '',
   pickup_type: 'locale' as PickupType,
@@ -96,15 +100,21 @@ export function ReserveForm({ slug, base }: { slug: string; base: string }) {
         </div>
       </div>
 
-      <fieldset>
-        <legend className="label">Pickup</legend>
-        <div className="flex flex-col sm:flex-row gap-2">
-          {pickupOption('locale', MapPin, 'Locale', 'Pick up in person at the Locale')}
-          {pickupOption('other', Truck, 'Other', 'Pick up at a different address')}
-        </div>
-      </fieldset>
+      {SHOW_PICKUP_OPTIONS ? (
+        <fieldset>
+          <legend className="label">Pickup</legend>
+          <div className="flex flex-col sm:flex-row gap-2">
+            {pickupOption('locale', MapPin, 'Locale', 'Pick up in person at the Locale')}
+            {pickupOption('other', Truck, 'Other', 'Pick up at a different address')}
+          </div>
+        </fieldset>
+      ) : (
+        <p className="flex items-center gap-2 rounded-xl bg-coffee-50 px-4 py-3 text-sm text-coffee-700">
+          <MapPin className="w-4 h-4 flex-shrink-0" /> Pickup is in person at the Locale.
+        </p>
+      )}
 
-      {form.pickup_type === 'other' && (
+      {SHOW_PICKUP_OPTIONS && form.pickup_type === 'other' && (
         <div className="space-y-3 rounded-xl bg-coffee-50 p-4">
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
