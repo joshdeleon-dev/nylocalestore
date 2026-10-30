@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ImageOff, MapPin, Truck } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/SortableHeader';
 import { ReservationPanel, daysSince } from './ReservationPanel';
 import { RESERVATION_STATUS_BADGE, RESERVATION_STATUS_LABELS, formatCents } from '@/lib/marketplace';
 import { MarketplaceReservation } from '@/types/marketplace';
@@ -19,6 +21,15 @@ export function ReservationsTab({ onOpenListing, onChanged }: Props) {
   const [rows, setRows] = useState<MarketplaceReservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<MarketplaceReservation | null>(null);
+
+  const { sorted, sortKey, sortDir, requestSort } = useTableSort(rows, {
+    item: (r) => r.listing?.title,
+    buyer: (r) => r.buyer_name,
+    pickup: (r) => (r.pickup_type === 'locale' ? 'Locale' : `Other ${r.pickup_city ?? ''}`),
+    status: (r) => RESERVATION_STATUS_LABELS[r.status],
+    // Open view shows days reserved (ascending = newest first); other views show the date
+    reserved: (r) => (view === 'open' ? -1 : 1) * new Date(r.created_at).getTime(),
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,15 +68,15 @@ export function ReservationsTab({ onOpenListing, onChanged }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-coffee-50 text-left text-xs uppercase tracking-wider text-coffee-500">
                 <tr>
-                  <th className="px-4 py-3">Item</th>
-                  <th className="px-4 py-3">Buyer</th>
-                  <th className="px-4 py-3">Pickup</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">{view === 'open' ? 'Reserved for' : 'Reserved'}</th>
+                  <SortableHeader label="Item" sortKey="item" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                  <SortableHeader label="Buyer" sortKey="buyer" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                  <SortableHeader label="Pickup" sortKey="pickup" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                  <SortableHeader label="Status" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                  <SortableHeader label={view === 'open' ? 'Reserved for' : 'Reserved'} sortKey="reserved" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-coffee-100">
-                {rows.map((r) => {
+                {sorted.map((r) => {
                   const days = daysSince(r.created_at);
                   return (
                     <tr key={r.id} onClick={() => setSelected(r)} className="cursor-pointer hover:bg-coffee-50/60">

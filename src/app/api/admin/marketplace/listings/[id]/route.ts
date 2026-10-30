@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
+import { requireRole, ADMIN_MANAGER, ADMIN_ONLY } from '@/lib/apiAuth';
 import { firstZodError, updateListingSchema } from '@/lib/marketplace';
-import { audit, db, loadListing, uniqueSlug } from '@/lib/marketplaceServer';
+import { PENDING_BUCKET, PUBLIC_BUCKET, audit, db, loadListing, uniqueSlug } from '@/lib/marketplaceServer';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -46,6 +46,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const before = await loadListing(id);
   if (!before) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 });
+  if (before.archived_at) {
+    return NextResponse.json({ success: false, error: 'Restore this item from the archive first' }, { status: 409 });
+  }
   // Paid items are locked to their sale snapshot; untick "Buyer has paid" to edit
   if (before.status === 'sold' || before.status === 'paid') {
     return NextResponse.json({ success: false, error: 'Paid and sold listings can’t be edited — untick “Buyer has paid” first' }, { status: 409 });
@@ -69,4 +72,27 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const strip = (l: any) => ({ ...l, images: undefined });
   await audit(auth.id, 'listing', id, 'update', strip(before), strip(after));
   return NextResponse.json({ success: true, data: after });
+}
+
+// Permanently delete a listing and everything attached to it. Admins only; this can't be undone.
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const auth = await requireRole(req, ADMIN_ONLY);
+  if (auth instanceof NextResponse) return auth;
+
+  const id = Number((await params).id);
+  const { data: paths, error } = await db.rpc('marketplace_delete_listing', { p_listing_id: id, p_actor: auth.id });
+  if (error) {
+    if (error.code === 'MP008') return NextResponse.json({ success: false, error: error.message }, { status: 404 });
+    if (error.code === 'MP009' || error.code === 'MP010') return NextResponse.json({ success: false, error: error.message }, { status: 409 });
+    console.error('Marketplace delete failed:', error);
+    return NextResponse.json({ success: false, error: 'Delete failed' }, { status: 500 });
+  }
+
+  // The database record is gone; photo cleanup failing leaves unreachable files, so report it but don't fail
+  const files: string[] = paths ?? [];
+  if (files.length) {
+    const results = await Promise.all([PENDING_BUCKET, PUBLIC_BUCKET].map((b) => db.storage.from(b).remove(files)));
+    for (const r of results) if (r.error) console.error('Marketplace photo cleanup failed:', id, r.error);
+  }
+  return NextResponse.json({ success: true });
 }

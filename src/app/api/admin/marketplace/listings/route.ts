@@ -6,7 +6,7 @@ import { audit, db, uniqueSlug, withSignedUrls } from '@/lib/marketplaceServer';
 const LIST_SELECT =
   '*, seller:marketplace_sellers(id, name, email, phone), category:marketplace_categories(id, name), images:marketplace_listing_images(id, listing_id, storage_path, public_path, sort_order)';
 
-// ?status=submitted | ?status=published,unpublished | ?q=search
+// ?status=submitted | ?status=published,unpublished | ?q=search | ?archived=1 (only archived items; hidden otherwise)
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ADMIN_MANAGER);
   if (auth instanceof NextResponse) return auth;
@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
 
   let query = db.from('marketplace_listings').select(LIST_SELECT).order('created_at', { ascending: false }).limit(500);
   if (statuses?.length) query = query.in('status', statuses);
+  query = url.searchParams.get('archived') === '1' ? query.not('archived_at', 'is', null) : query.is('archived_at', null);
   if (q) query = query.ilike('title', `%${q.replace(/[%_]/g, '')}%`);
 
   const { data, error } = await query;

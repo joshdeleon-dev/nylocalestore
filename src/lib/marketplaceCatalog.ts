@@ -54,7 +54,7 @@ export async function getCatalog(opts: { q?: string; category?: string; sort?: C
     categoryId = data.id;
   }
 
-  let query = db.from('marketplace_listings').select(PUBLIC_SELECT, { count: 'exact' }).in('status', VISIBLE_STATUSES);
+  let query = db.from('marketplace_listings').select(PUBLIC_SELECT, { count: 'exact' }).in('status', VISIBLE_STATUSES).is('archived_at', null);
   if (categoryId) query = query.eq('category_id', categoryId);
   const q = opts.q?.trim().replace(/[%_,()]/g, ' ');
   if (q) query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
@@ -70,7 +70,7 @@ export async function getCatalog(opts: { q?: string; category?: string; sort?: C
 }
 
 export async function getPublicListing(slug: string): Promise<PublicListing | null> {
-  const { data } = await db.from('marketplace_listings').select(PUBLIC_SELECT).eq('slug', slug).in('status', VISIBLE_STATUSES).maybeSingle();
+  const { data } = await db.from('marketplace_listings').select(PUBLIC_SELECT).eq('slug', slug).in('status', VISIBLE_STATUSES).is('archived_at', null).maybeSingle();
   return data ? toPublic(data) : null;
 }
 
@@ -81,6 +81,7 @@ export async function getCatalogCategories() {
     .select('id, name, slug, sort_order, listings:marketplace_listings(count)')
     .eq('is_active', true)
     .in('marketplace_listings.status', VISIBLE_STATUSES)
+    .is('marketplace_listings.archived_at', null)
     .order('sort_order')
     .order('name');
   return (data ?? []).map((c: any) => ({ id: c.id, name: c.name, slug: c.slug, count: c.listings?.[0]?.count ?? 0 }));

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Search, Store, ImageOff, Pencil, Trash2, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/SortableHeader';
 import { ListingEditor } from './ListingEditor';
 import { ReservationsTab } from './ReservationsTab';
 import { PaymentsTab } from './PaymentsTab';
@@ -21,16 +24,27 @@ type ListingRow = MarketplaceListing & { image_count: number };
 
 // Shared by /dashboard/admin/marketplace and /dashboard/manager/marketplace
 export function MarketplaceAdmin() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<Tab>('submissions');
   const [listings, setListings] = useState<ListingRow[]>([]);
   const [categories, setCategories] = useState<MarketplaceCategory[]>([]);
-  const [statusFilter, setStatusFilter] = useState<ListingStatus | ''>('');
+  const [statusFilter, setStatusFilter] = useState<ListingStatus | 'archived' | ''>('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<number | 'new' | null>(null);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [openReservationCount, setOpenReservationCount] = useState(0);
   const [overview, setOverview] = useState<ReportSummary | null>(null);
+
+  const { sorted: sortedListings, sortKey, sortDir, requestSort } = useTableSort(listings, {
+    item: (l) => l.title,
+    seller: (l) => l.seller?.name,
+    price: (l) => l.asking_price_cents,
+    locale: (l) => l.locale_amount_cents,
+    payout: (l) => l.seller_payout_cents,
+    status: (l) => STATUS_LABELS[l.status],
+    submitted: (l) => new Date(l.created_at).getTime(),
+  });
 
   const loadCategories = useCallback(async () => {
     const res = await fetch('/api/admin/marketplace/categories');
@@ -41,8 +55,9 @@ export function MarketplaceAdmin() {
   const loadListings = useCallback(async () => {
     if (tab !== 'submissions' && tab !== 'listings') return;
     setLoading(true);
-    const statuses = statusFilter ? [statusFilter] : TAB_STATUSES[tab];
-    const params = new URLSearchParams({ status: statuses.join(',') });
+    const params = new URLSearchParams();
+    if (statusFilter === 'archived') params.set('archived', '1');
+    else params.set('status', (statusFilter ? [statusFilter] : TAB_STATUSES[tab]).join(','));
     if (search.trim()) params.set('q', search.trim());
     const res = await fetch(`/api/admin/marketplace/listings?${params}`);
     const json = await res.json();
@@ -140,9 +155,10 @@ export function MarketplaceAdmin() {
               <input className="input pl-9" placeholder="Search by title…" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             {tab === 'listings' && (
-              <select className="select w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as ListingStatus | '')}>
+              <select className="select w-auto" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as ListingStatus | 'archived' | '')}>
                 <option value="">All statuses</option>
                 {TAB_STATUSES.listings.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+                <option value="archived">Archived</option>
               </select>
             )}
           </div>
@@ -159,17 +175,17 @@ export function MarketplaceAdmin() {
                 <table className="w-full text-sm">
                   <thead className="bg-coffee-50 text-left text-xs uppercase tracking-wider text-coffee-500">
                     <tr>
-                      <th className="px-4 py-3">Item</th>
-                      <th className="px-4 py-3">Seller</th>
-                      <th className="px-4 py-3 text-right">Asking price</th>
-                      <th className="px-4 py-3 text-right">For Locale</th>
-                      <th className="px-4 py-3 text-right">Pay seller</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Submitted</th>
+                      <SortableHeader label="Item" sortKey="item" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                      <SortableHeader label="Seller" sortKey="seller" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                      <SortableHeader label="Asking price" sortKey="price" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                      <SortableHeader label="For Locale" sortKey="locale" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                      <SortableHeader label="Pay seller" sortKey="payout" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                      <SortableHeader label="Status" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                      <SortableHeader label="Submitted" sortKey="submitted" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-coffee-100">
-                    {listings.map((l) => (
+                    {sortedListings.map((l) => (
                       <tr key={l.id} onClick={() => setEditing(l.id)} className="cursor-pointer hover:bg-coffee-50/60">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -197,6 +213,7 @@ export function MarketplaceAdmin() {
                         <td className="px-4 py-3 text-right font-medium">{formatCents(l.seller_payout_cents)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[l.status]}`}>{STATUS_LABELS[l.status]}</span>
+                          {l.archived_at && <span className="ml-1 inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">Archived</span>}
                         </td>
                         <td className="px-4 py-3 text-xs text-coffee-500 whitespace-nowrap">{new Date(l.created_at).toLocaleDateString()}</td>
                       </tr>
@@ -211,6 +228,7 @@ export function MarketplaceAdmin() {
 
       {editing != null && (
         <ListingEditor
+          canDelete={user?.role === 'ADMIN'}
           listingId={editing === 'new' ? null : editing}
           categories={categories}
           onClose={() => setEditing(null)}

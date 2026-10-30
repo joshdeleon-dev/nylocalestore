@@ -17,6 +17,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const before = await loadListing(id);
   if (!before) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 });
+  if (before.archived_at) {
+    return NextResponse.json({ success: false, error: 'Restore this item from the archive first' }, { status: 409 });
+  }
   if (!ALLOWED_ACTIONS[before.status as keyof typeof ALLOWED_ACTIONS]?.includes(action)) {
     return NextResponse.json({ success: false, error: `Can’t ${action} a listing that is ${before.status}` }, { status: 409 });
   }

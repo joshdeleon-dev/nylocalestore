@@ -28,6 +28,9 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const before = await loadPaymentRow(listingId);
   if (!before) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 });
+  if (before.archived_at) {
+    return NextResponse.json({ success: false, error: 'Restore this item from the archive first' }, { status: 409 });
+  }
 
   const fn = field === 'buyer_paid' ? 'marketplace_set_buyer_paid' : 'marketplace_set_seller_paid';
   const { data: newStatus, error } = await db.rpc(fn, { p_listing_id: listingId, p_paid: paid, p_actor: auth.id });

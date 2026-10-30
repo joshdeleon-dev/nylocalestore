@@ -57,6 +57,7 @@ export interface MarketplaceListing {
   admin_notes: string | null;
   reviewed_at: string | null;
   published_at: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
   seller?: MarketplaceSeller;

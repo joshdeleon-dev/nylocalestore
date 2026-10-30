@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/SortableHeader';
 import { formatCents } from '@/lib/marketplace';
 
 export interface ReportSummary {
@@ -80,6 +82,17 @@ export function ReportsTab() {
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+
+  const { sorted: sortedSales, sortKey, sortDir, requestSort } = useTableSort(sales, {
+    paid: (s) => new Date(s.buyer_paid_at).getTime(),
+    item: (s) => s.title,
+    buyer: (s) => s.buyer_name || null,
+    seller: (s) => s.seller_name,
+    price: (s) => s.sale_price_cents,
+    locale: (s) => s.locale_amount_cents,
+    payout: (s) => s.seller_payout_cents,
+    status: (s) => (s.seller_paid_at ? 'Sold' : 'Awaiting payout'),
+  });
 
   const query = () => {
     const p = new URLSearchParams();
@@ -172,18 +185,18 @@ export function ReportsTab() {
                 <table className="w-full text-sm">
                   <thead className="bg-coffee-50 text-left text-xs uppercase tracking-wider text-coffee-500">
                     <tr>
-                      <th className="px-4 py-3">Paid on</th>
-                      <th className="px-4 py-3">Item</th>
-                      <th className="px-4 py-3">Buyer</th>
-                      <th className="px-4 py-3">Seller</th>
-                      <th className="px-4 py-3 text-right">Sale price</th>
-                      <th className="px-4 py-3 text-right">For Locale</th>
-                      <th className="px-4 py-3 text-right">Seller payout</th>
-                      <th className="px-4 py-3">Status</th>
+                      <SortableHeader label="Paid on" sortKey="paid" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                      <SortableHeader label="Item" sortKey="item" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                      <SortableHeader label="Buyer" sortKey="buyer" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                      <SortableHeader label="Seller" sortKey="seller" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                      <SortableHeader label="Sale price" sortKey="price" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                      <SortableHeader label="For Locale" sortKey="locale" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                      <SortableHeader label="Seller payout" sortKey="payout" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                      <SortableHeader label="Status" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-coffee-100">
-                    {sales.map((s) => (
+                    {sortedSales.map((s) => (
                       <tr key={s.listing_id}>
                         <td className="px-4 py-3 whitespace-nowrap text-coffee-600">{new Date(s.buyer_paid_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}</td>
                         <td className="px-4 py-3"><p className="text-gray-900">{s.title}</p><p className="text-xs text-coffee-400">{s.category || 'Uncategorized'}</p></td>

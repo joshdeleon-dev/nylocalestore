@@ -17,6 +17,9 @@ export async function POST(req: NextRequest, { params }: Params) {
   const id = Number((await params).id);
   const listing = await loadListing(id);
   if (!listing) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 });
+  if (listing.archived_at) {
+    return NextResponse.json({ success: false, error: 'Restore this item from the archive first' }, { status: 409 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const folder = `listings/${id}`;
@@ -62,6 +65,9 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   if (!img) return NextResponse.json({ success: false, error: 'Photo not found' }, { status: 404 });
 
   const listing = await loadListing(id);
+  if (listing?.archived_at) {
+    return NextResponse.json({ success: false, error: 'Restore this item from the archive first' }, { status: 409 });
+  }
   if (['published', 'reserved'].includes(listing?.status) && listing.images.length <= 1) {
     return NextResponse.json({ success: false, error: 'A live listing needs at least one photo' }, { status: 400 });
   }
@@ -80,6 +86,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (auth instanceof NextResponse) return auth;
 
   const id = Number((await params).id);
+  const listing = await loadListing(id);
+  if (listing?.archived_at) {
+    return NextResponse.json({ success: false, error: 'Restore this item from the archive first' }, { status: 409 });
+  }
   const { order } = await req.json().catch(() => ({}));
   if (!Array.isArray(order)) return NextResponse.json({ success: false, error: 'order array required' }, { status: 400 });
 

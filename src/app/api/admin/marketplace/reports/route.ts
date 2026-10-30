@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   if (start) payoutsQuery = payoutsQuery.gte('seller_paid_at', start);
   if (end) payoutsQuery = payoutsQuery.lt('seller_paid_at', end);
 
-  const count = (status: string) => db.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('status', status);
+  const count = (status: string) => db.from('marketplace_listings').select('id', { count: 'exact', head: true }).eq('status', status).is('archived_at', null);
   const [sales, payouts, owed, submitted, published, reserved, openReservations] = await Promise.all([
     salesQuery,
     payoutsQuery,

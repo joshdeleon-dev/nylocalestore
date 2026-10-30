@@ -19,6 +19,7 @@ interface Props {
   categories: MarketplaceCategory[];
   onClose: () => void;
   onChanged: () => void;
+  canDelete: boolean; // permanent delete is admin-only
 }
 
 const ACTION_LABELS: Record<ListingAction, string> = {
@@ -50,7 +51,7 @@ const emptyForm = {
   seller: { name: '', email: '', phone: '' },
 };
 
-export function ListingEditor({ listingId, categories, onClose, onChanged }: Props) {
+export function ListingEditor({ listingId, categories, onClose, onChanged, canDelete }: Props) {
   const [id, setId] = useState<number | null>(listingId);
   const [listing, setListing] = useState<MarketplaceListing | null>(null);
   const [history, setHistory] = useState<MarketplaceAuditEntry[]>([]);
@@ -61,6 +62,8 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [zoomIndex, setZoomIndex] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteText, setDeleteText] = useState('');
   const [payment, setPayment] = useState<PaymentRow | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -194,8 +197,38 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
     await load(id);
   };
 
-  const actions = listing ? ALLOWED_ACTIONS[listing.status] : [];
-  const readOnly = listing?.status === 'sold' || listing?.status === 'paid';
+  const archived = Boolean(listing?.archived_at);
+  const actions = listing && !archived ? ALLOWED_ACTIONS[listing.status] : [];
+  const readOnly = archived || listing?.status === 'sold' || listing?.status === 'paid';
+  const archivable = listing?.status !== 'reserved' && listing?.status !== 'paid';
+
+  const setArchived = async (value: boolean) => {
+    if (!id) return;
+    setSaving(true);
+    const res = await fetch(`/api/admin/marketplace/listings/${id}/archive`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: value }),
+    });
+    const json = await res.json();
+    setSaving(false);
+    if (!res.ok) { toast.error(json.error || 'Failed'); return; }
+    toast.success(value ? 'Item archived' : 'Item restored');
+    onChanged();
+    await load(id);
+  };
+
+  const deleteListing = async () => {
+    if (!id) return;
+    setSaving(true);
+    const res = await fetch(`/api/admin/marketplace/listings/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    setSaving(false);
+    if (!res.ok) { toast.error(json.error || 'Delete failed'); return; }
+    toast.success('Item permanently deleted');
+    onChanged();
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -209,6 +242,7 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
                 <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[listing.status]}`}>
                   {STATUS_LABELS[listing.status]}
                 </span>
+                {archived && <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">Archived</span>}
                 <span className="text-xs text-coffee-400">#{listing.id} · /{listing.slug}</span>
               </div>
             )}
@@ -225,6 +259,11 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
         ) : (
           <div className="flex-1 overflow-y-auto">
             {/* Status actions */}
+            {archived && (
+              <p className="px-6 py-3 border-b border-coffee-100 bg-gray-50 text-sm text-gray-700">
+                This item is archived: hidden from the marketplace and read-only. Restore it to make changes.
+              </p>
+            )}
             {listing && (actions.length > 0 || listing.rejection_reason || listing.status === 'reserved') && (
               <div className="px-6 py-4 border-b border-coffee-100 bg-coffee-50/60 space-y-3">
                 {listing.status === 'reserved' && (
@@ -273,7 +312,7 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
                   <div><dt className="text-xs text-coffee-500">Pay seller</dt><dd className="font-semibold">{formatCents(payment.sale?.seller_payout_cents ?? payment.seller_payout_cents)}</dd></div>
                 </dl>
                 {payment.buyer && <p className="text-xs text-coffee-500">Buyer: {payment.buyer.buyer_name} · {payment.buyer.buyer_phone}</p>}
-                <PaymentCheckboxes row={payment} onChanged={(updated) => { setPayment(updated); onChanged(); if (id) load(id); }} />
+                {!archived && <PaymentCheckboxes row={payment} onChanged={(updated) => { setPayment(updated); onChanged(); if (id) load(id); }} />}
                 {payment.sale && <p className="text-xs text-coffee-400">Amounts are locked to what they were when the buyer paid.</p>}
               </section>
             )}
@@ -417,6 +456,42 @@ export function ListingEditor({ listingId, categories, onClose, onChanged }: Pro
                 </section>
               )}
             </form>
+
+            {listing && (
+              <section className="px-6 py-5 border-t border-coffee-100 space-y-3">
+                <h3 className="text-sm font-semibold text-gray-900">Manage record</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  {archived ? (
+                    <button type="button" disabled={saving} onClick={() => setArchived(false)} className="btn btn-secondary btn-sm">Restore from archive</button>
+                  ) : (
+                    <button type="button" disabled={saving || !archivable} onClick={() => setArchived(true)} className="btn btn-secondary btn-sm">Archive</button>
+                  )}
+                  {canDelete && !deleting && (
+                    <button type="button" disabled={saving} onClick={() => setDeleting(true)} className="btn btn-secondary btn-sm text-red-600 hover:bg-red-50">Delete permanently</button>
+                  )}
+                </div>
+                {!archived && !archivable && (
+                  <p className="text-xs text-coffee-500">Reserved items and items awaiting seller payout can’t be archived until that’s resolved.</p>
+                )}
+                {!archived && archivable && <p className="text-xs text-coffee-500">Archiving hides this item from the marketplace but keeps it here{listing.status === 'sold' ? ' and in Reports' : ''}.</p>}
+                {deleting && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
+                    <p className="text-sm text-red-800">
+                      This permanently deletes the listing, its photos, reservations and sale record, its history, and the seller’s details if they have no other listings. <span className="font-medium">This can’t be undone.</span>
+                      {listing.status === 'sold' && ' This sale will also disappear from Reports, including its For Locale amount.'}
+                    </p>
+                    <div>
+                      <label className="label" htmlFor="confirm-delete">Type DELETE to confirm</label>
+                      <input id="confirm-delete" className="input" value={deleteText} onChange={(e) => setDeleteText(e.target.value)} autoComplete="off" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" disabled={saving || deleteText !== 'DELETE'} onClick={deleteListing} className="btn btn-danger btn-sm">Delete permanently</button>
+                      <button type="button" onClick={() => { setDeleting(false); setDeleteText(''); }} className="btn btn-secondary btn-sm">Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         )}
 

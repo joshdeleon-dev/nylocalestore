@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTableSort } from '@/hooks/useTableSort';
+import { SortableHeader } from '@/components/SortableHeader';
 import { PaymentCheckboxes, PaymentRow } from './PaymentCheckboxes';
 import { formatCents } from '@/lib/marketplace';
 
@@ -18,6 +20,17 @@ export function PaymentsTab({ onOpenListing, onChanged }: { onOpenListing: (id: 
   const [view, setView] = useState<View>('awaiting_buyer');
   const [rows, setRows] = useState<PaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Paid items sort by the snapshot taken at payment time, matching what the row shows
+  const { sorted, sortKey, sortDir, requestSort } = useTableSort(rows, {
+    item: (r) => r.title,
+    buyer: (r) => r.buyer?.buyer_name,
+    seller: (r) => r.seller?.name,
+    price: (r) => r.sale?.sale_price_cents ?? r.asking_price_cents,
+    locale: (r) => r.sale?.locale_amount_cents ?? r.locale_amount_cents,
+    payout: (r) => r.sale?.seller_payout_cents ?? r.seller_payout_cents,
+    payment: (r) => new Date(r.sale?.seller_paid_at ?? r.sale?.buyer_paid_at ?? 0).getTime() || null,
+  });
 
   // Always load the view that's showing *now*, and drop responses for a view the user has left
   const viewRef = useRef(view);
@@ -89,17 +102,17 @@ export function PaymentsTab({ onOpenListing, onChanged }: { onOpenListing: (id: 
             <table className="w-full text-sm">
               <thead className="bg-coffee-50 text-left text-xs uppercase tracking-wider text-coffee-500">
                 <tr>
-                  <th className="px-4 py-3">Item</th>
-                  <th className="px-4 py-3">Buyer</th>
-                  <th className="px-4 py-3">Seller</th>
-                  <th className="px-4 py-3 text-right">Asking price</th>
-                  <th className="px-4 py-3 text-right">For Locale</th>
-                  <th className="px-4 py-3 text-right">Pay seller</th>
-                  <th className="px-4 py-3">Payment</th>
+                  <SortableHeader label="Item" sortKey="item" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                  <SortableHeader label="Buyer" sortKey="buyer" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                  <SortableHeader label="Seller" sortKey="seller" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
+                  <SortableHeader label="Asking price" sortKey="price" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                  <SortableHeader label="For Locale" sortKey="locale" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                  <SortableHeader label="Pay seller" sortKey="payout" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" align="right" />
+                  <SortableHeader label="Payment" sortKey="payment" currentKey={sortKey} dir={sortDir} onSort={requestSort} className="!px-4" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-coffee-100">
-                {rows.map((r) => {
+                {sorted.map((r) => {
                   // Paid items show the snapshot taken at payment time
                   const price = r.sale?.sale_price_cents ?? r.asking_price_cents;
                   const pct = Number(r.sale?.locale_percent ?? r.locale_percent);

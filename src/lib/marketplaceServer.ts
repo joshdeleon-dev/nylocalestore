@@ -182,7 +182,7 @@ export type PaymentView = 'awaiting_buyer' | 'awaiting_payout' | 'sold';
 const PAYMENT_VIEW_STATUS: Record<PaymentView, string> = { awaiting_buyer: 'reserved', awaiting_payout: 'paid', sold: 'sold' };
 
 const PAYMENT_SELECT =
-  'id, title, slug, status, asking_price_cents, locale_percent, locale_amount_cents, seller_payout_cents, updated_at, seller:marketplace_sellers(name, phone, email), category:marketplace_categories(name), images:marketplace_listing_images(storage_path, sort_order), sale:marketplace_sales(*), reservations:marketplace_reservations(id, buyer_name, buyer_phone, buyer_email, status, created_at)';
+  'id, title, slug, status, archived_at, asking_price_cents, locale_percent, locale_amount_cents, seller_payout_cents, updated_at, seller:marketplace_sellers(name, phone, email), category:marketplace_categories(name), images:marketplace_listing_images(storage_path, sort_order), sale:marketplace_sales(*), reservations:marketplace_reservations(id, buyer_name, buyer_phone, buyer_email, status, created_at)';
 
 async function userNames(ids: (string | null | undefined)[]) {
   const unique = [...new Set(ids.filter(Boolean))] as string[];
@@ -224,6 +224,7 @@ export async function loadPaymentRows(view: PaymentView) {
     .from('marketplace_listings')
     .select(PAYMENT_SELECT)
     .eq('status', PAYMENT_VIEW_STATUS[view])
+    .is('archived_at', null)
     .order('updated_at', { ascending: view !== 'sold' })
     .limit(500);
   if (error) throw error;
