@@ -9,6 +9,7 @@ interface Props {
   onChange: (value: { priceCents: number | null; percent: number }) => void;
   priceLabel?: string;
   receiveLabel?: string;
+  allowCustom?: boolean; // sellers only get the quick picks; admins can enter any percentage
 }
 
 const toDollars = (cents: number | null) => (cents == null ? '' : (cents / 100).toFixed(2));
@@ -16,7 +17,7 @@ const toDollars = (cents: number | null) => (cents == null ? '' : (cents / 100).
 // Price + voluntary "For Locale" donation, with a live breakdown.
 // Shared by the admin listing editor and (Phase 2) the public seller form.
 // Initial values are read once; give it a `key` to reset it for a different listing.
-export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabel = 'Asking price', receiveLabel = 'Seller receives' }: Props) {
+export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabel = 'Asking price', receiveLabel = 'Seller receives', allowCustom = true }: Props) {
   const [priceText, setPriceText] = useState(toDollars(priceCents));
   // 0% (no donation) shows nothing selected; any other non-quick-pick value shows Custom
   const [custom, setCustom] = useState(percent !== 0 && !QUICK_PICK_PERCENTS.includes(percent));
@@ -80,16 +81,18 @@ export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabe
               {p}%
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setCustom(true)}
-            aria-pressed={custom}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              custom ? 'bg-coffee-900 text-white border-coffee-900' : 'bg-white text-coffee-700 border-coffee-200 hover:bg-coffee-50'
-            }`}
-          >
-            Custom
-          </button>
+          {allowCustom && (
+            <button
+              type="button"
+              onClick={() => setCustom(true)}
+              aria-pressed={custom}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                custom ? 'bg-coffee-900 text-white border-coffee-900' : 'bg-white text-coffee-700 border-coffee-200 hover:bg-coffee-50'
+              }`}
+            >
+              Custom
+            </button>
+          )}
           {custom && (
             <div className="relative w-28">
               <input

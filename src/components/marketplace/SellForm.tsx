@@ -143,6 +143,7 @@ export function SellForm({ base, categories }: Props) {
           onChange={({ priceCents, percent }) => setForm((f) => ({ ...f, priceCents, percent }))}
           priceLabel="Your price"
           receiveLabel="You’ll receive"
+          allowCustom={false}
         />
       </Section>
 
