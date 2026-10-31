@@ -136,7 +136,7 @@ export function SellForm({ base, categories }: Props) {
         </div>
       </Section>
 
-      <Section title="Price" hint="Optionally donate part of the sale to the locale. Buyers only see your price.">
+      <Section title="Price" hint="Optionally donate part of the sale to the locale. Buyers only see your price, unless you choose 100%: those items are shown as “100% for Flagship”.">
         <LocaleSplitCalculator
           priceCents={form.priceCents}
           percent={form.percent}

@@ -51,6 +51,7 @@ export default async function ListingPage({ params }: { params: Params }) {
           <p className="text-2xl font-semibold text-coffee-900 mt-3">{formatCents(listing.price_cents)}</p>
 
           <dl className="mt-5 flex flex-wrap gap-2 text-sm">
+            {listing.is_flagship && <div className="rounded-full bg-coffee-900 px-3 py-1"><dd className="text-white font-medium">100% for Flagship</dd></div>}
             <div className="rounded-full bg-coffee-100 px-3 py-1"><dt className="sr-only">Condition</dt><dd className="text-coffee-800">{CONDITION_LABELS[listing.condition]}</dd></div>
             <div className="rounded-full bg-coffee-100 px-3 py-1 inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /><dd className="text-coffee-800">Pickup at the Locale</dd></div>
           </dl>

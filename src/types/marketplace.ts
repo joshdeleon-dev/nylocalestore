@@ -58,6 +58,8 @@ export interface MarketplaceListing {
   reviewed_at: string | null;
   published_at: string | null;
   archived_at: string | null;
+  flagship_manual: boolean;
+  is_flagship: boolean; // automatic at a 100% donation, or flagship_manual
   created_at: string;
   updated_at: string;
   seller?: MarketplaceSeller;

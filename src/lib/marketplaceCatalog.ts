@@ -8,7 +8,7 @@ import { ListingCondition } from '@/types/marketplace';
 const VISIBLE_STATUSES = ['published', 'reserved'];
 
 const PUBLIC_SELECT =
-  'id, slug, title, description, condition, asking_price_cents, status, published_at, category:marketplace_categories(name, slug), images:marketplace_listing_images(public_path, sort_order)';
+  'id, slug, title, description, condition, asking_price_cents, status, is_flagship, published_at, category:marketplace_categories(name, slug), images:marketplace_listing_images(public_path, sort_order)';
 
 export interface PublicListing {
   id: number;
@@ -18,6 +18,7 @@ export interface PublicListing {
   condition: ListingCondition;
   price_cents: number;
   is_reserved: boolean;
+  is_flagship: boolean;
   published_at: string | null;
   category: { name: string; slug: string } | null;
   images: string[];
@@ -36,6 +37,7 @@ function toPublic(row: any): PublicListing {
     condition: row.condition,
     price_cents: row.asking_price_cents,
     is_reserved: row.status === 'reserved',
+    is_flagship: row.is_flagship,
     published_at: row.published_at,
     category: row.category ?? null,
     images,
@@ -45,7 +47,7 @@ function toPublic(row: any): PublicListing {
 export type CatalogSort = 'newest' | 'price_asc' | 'price_desc';
 export const PAGE_SIZE = 24;
 
-export async function getCatalog(opts: { q?: string; category?: string; sort?: CatalogSort; page?: number }) {
+export async function getCatalog(opts: { q?: string; category?: string; sort?: CatalogSort; page?: number; flagship?: boolean }) {
   const page = Math.max(1, opts.page ?? 1);
   let categoryId: number | null = null;
   if (opts.category) {
@@ -56,6 +58,7 @@ export async function getCatalog(opts: { q?: string; category?: string; sort?: C
 
   let query = db.from('marketplace_listings').select(PUBLIC_SELECT, { count: 'exact' }).in('status', VISIBLE_STATUSES).is('archived_at', null);
   if (categoryId) query = query.eq('category_id', categoryId);
+  if (opts.flagship) query = query.eq('is_flagship', true);
   const q = opts.q?.trim().replace(/[%_,()]/g, ' ');
   if (q) query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
 

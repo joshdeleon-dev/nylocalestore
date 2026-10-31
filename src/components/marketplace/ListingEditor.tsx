@@ -48,6 +48,7 @@ const emptyForm = {
   asking_price_cents: null as number | null,
   locale_percent: 0,
   admin_notes: '',
+  flagship_manual: false,
   seller: { name: '', email: '', phone: '' },
 };
 
@@ -77,6 +78,7 @@ export function ListingEditor({ listingId, categories, onClose, onChanged, canDe
       asking_price_cents: l.asking_price_cents,
       locale_percent: Number(l.locale_percent),
       admin_notes: l.admin_notes ?? '',
+      flagship_manual: l.flagship_manual,
       seller: { name: l.seller?.name ?? '', email: l.seller?.email ?? '', phone: l.seller?.phone ?? '' },
     });
   };
@@ -114,6 +116,7 @@ export function ListingEditor({ listingId, categories, onClose, onChanged, canDe
       asking_price_cents: form.asking_price_cents,
       locale_percent: form.locale_percent,
       admin_notes: form.admin_notes || null,
+      flagship_manual: form.flagship_manual,
       seller: form.seller,
     };
     const res = await fetch(id ? `/api/admin/marketplace/listings/${id}` : '/api/admin/marketplace/listings', {
@@ -430,6 +433,27 @@ export function ListingEditor({ listingId, categories, onClose, onChanged, canDe
                   percent={form.locale_percent}
                   onChange={({ priceCents, percent }) => setForm((f) => ({ ...f, asking_price_cents: priceCents, locale_percent: percent }))}
                 />
+                <label className={`flex items-start gap-2 text-sm ${readOnly || form.locale_percent === 100 ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                  <input
+                    type="checkbox"
+                    className="checkbox mt-0.5"
+                    checked={form.locale_percent === 100 || form.flagship_manual}
+                    disabled={readOnly || form.locale_percent === 100}
+                    onChange={(e) => setField('flagship_manual', e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-medium text-gray-900">100% for Flagship</span>
+                    {form.locale_percent === 100 ? (
+                      <span className="block text-xs text-coffee-500">Automatic: this item donates 100% to the locale.</span>
+                    ) : form.flagship_manual ? (
+                      <span className="block text-xs text-amber-700">
+                        Marked manually. Buyers will be told 100% of this sale is donated, but For Locale is {form.locale_percent}%.
+                      </span>
+                    ) : (
+                      <span className="block text-xs text-coffee-500">Shows this item in the Shop for Flagship section.</span>
+                    )}
+                  </span>
+                </label>
               </section>
 
               <section>

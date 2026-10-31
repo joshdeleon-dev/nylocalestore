@@ -7,7 +7,18 @@ import { ListingCard } from '@/components/marketplace/ListingCard';
 import { CatalogSort, PAGE_SIZE, getCatalog, getCatalogCategories } from '@/lib/marketplaceCatalog';
 import { marketplaceBase } from '@/lib/marketplaceSite';
 
-type SearchParams = Promise<{ q?: string; category?: string; sort?: string; page?: string }>;
+type SearchParams = Promise<{ q?: string; category?: string; sort?: string; page?: string; flagship?: string }>;
+
+const FLAGSHIP_PREVIEW = 8;
+
+function FlagshipHeading() {
+  return (
+    <>
+      <h2 className="font-serif text-2xl sm:text-3xl font-medium leading-tight">Shop for Flagship: 100% of Proceeds Support Our Flagship</h2>
+      <p className="mt-2 text-coffee-200 max-w-2xl">Shop this collection and directly fund our flagship locale—100% of every sale is donated.</p>
+    </>
+  );
+}
 
 export default async function MarketplacePage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
@@ -15,11 +26,15 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
   const sort = (['newest', 'price_asc', 'price_desc'].includes(sp.sort ?? '') ? sp.sort : 'newest') as CatalogSort;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [{ listings, total }, categories] = await Promise.all([
-    getCatalog({ q: sp.q, category: sp.category, sort, page }),
+  const flagshipOnly = sp.flagship === '1';
+  const filtered = Boolean(sp.q || sp.category || flagshipOnly);
+  // The Shop for Flagship section sits on the unfiltered first page only
+  const showFlagship = !filtered && page === 1;
+  const [{ listings, total }, categories, flagship] = await Promise.all([
+    getCatalog({ q: sp.q, category: sp.category, sort, page, flagship: flagshipOnly }),
     getCatalogCategories(),
+    showFlagship ? getCatalog({ flagship: true }) : null,
   ]);
-  const filtered = Boolean(sp.q || sp.category);
   const pages = Math.ceil(total / PAGE_SIZE);
   const pageHref = (p: number) => {
     const next = new URLSearchParams(Object.entries(sp).filter(([, v]) => v) as [string, string][]);
@@ -37,6 +52,25 @@ export default async function MarketplacePage({ searchParams }: { searchParams: 
         </h1>
         <p className="mt-3 text-coffee-600 max-w-xl">Reserve an item online, then see it in person and pay when you pick it up.</p>
       </div>
+
+      {showFlagship && flagship && flagship.total > 0 && (
+        <section className="mb-10 rounded-3xl bg-coffee-900 text-white p-5 sm:p-8" aria-label="Shop for Flagship">
+          <FlagshipHeading />
+          <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 text-coffee-900">
+            {flagship.listings.slice(0, FLAGSHIP_PREVIEW).map((l) => <ListingCard key={l.id} listing={l} base={base} />)}
+          </div>
+          {flagship.total > FLAGSHIP_PREVIEW && (
+            <Link href={`${base || '/'}?flagship=1`} className="inline-block mt-6 text-sm font-medium underline underline-offset-4">View all {flagship.total} items</Link>
+          )}
+        </section>
+      )}
+
+      {flagshipOnly && (
+        <section className="mb-8 rounded-3xl bg-coffee-900 text-white p-5 sm:p-8" aria-label="Shop for Flagship">
+          <FlagshipHeading />
+          <Link href={base || '/'} className="inline-block mt-4 text-sm font-medium underline underline-offset-4">← All items</Link>
+        </section>
+      )}
 
       <Suspense>
         <CatalogControls base={base} categories={categories.filter((c) => c.count > 0)} />

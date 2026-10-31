@@ -197,6 +197,7 @@ export function MarketplaceAdmin() {
                             </div>
                             <div className="min-w-0">
                               <p className="font-medium text-gray-900 truncate max-w-[220px]">{l.title}</p>
+                              {l.is_flagship && <span className="inline-flex px-1.5 py-0.5 rounded bg-coffee-900 text-white text-[10px] font-semibold">100% for Flagship</span>}
                               <p className="text-xs text-coffee-400">{l.category?.name ?? 'Uncategorized'} · {l.image_count} photo{l.image_count === 1 ? '' : 's'}</p>
                             </div>
                           </div>

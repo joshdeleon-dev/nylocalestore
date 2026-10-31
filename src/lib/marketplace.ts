@@ -95,7 +95,8 @@ export const listingFieldsSchema = z.object({
   admin_notes: z.string().trim().max(2000).nullable().optional(),
 });
 
-export const createListingSchema = listingFieldsSchema.extend({ seller: sellerSchema });
+// flagship_manual is admin-only: it's on these schemas, not the public submission schema
+export const createListingSchema = listingFieldsSchema.extend({ seller: sellerSchema, flagship_manual: z.boolean().optional() });
 
 // Public "Sell an item" form: no admin fields, at least one photo, explicit consent
 export const publicSubmissionSchema = listingFieldsSchema.omit({ admin_notes: true }).extend({
@@ -107,7 +108,7 @@ export const publicSubmissionSchema = listingFieldsSchema.omit({ admin_notes: tr
   consent: z.literal(true, { errorMap: () => ({ message: 'Please confirm the agreement to continue' }) }),
 });
 
-export const updateListingSchema = listingFieldsSchema.partial().extend({ seller: sellerSchema.partial().optional() });
+export const updateListingSchema = listingFieldsSchema.partial().extend({ seller: sellerSchema.partial().optional(), flagship_manual: z.boolean().optional() });
 
 export const listingActionSchema = z.object({
   action: z.enum(['publish', 'unpublish', 'reject', 'withdraw', 'reopen', 'release']),

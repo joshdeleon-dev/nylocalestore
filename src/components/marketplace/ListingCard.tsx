@@ -24,6 +24,11 @@ export function ListingCard({ listing, base }: { listing: PublicListing; base: s
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-coffee-300"><ImageOff className="w-8 h-8" /></div>
         )}
+        {listing.is_flagship && (
+          <span className="absolute bottom-3 left-3 rounded-full bg-white text-coffee-900 text-[11px] font-semibold px-3 py-1 shadow">
+            100% for Flagship
+          </span>
+        )}
         {listing.is_reserved && (
           <span className="absolute top-3 left-3 rounded-full bg-coffee-900 text-white text-[11px] font-semibold uppercase tracking-wider px-3 py-1">
             Reserved
