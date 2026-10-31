@@ -51,6 +51,7 @@ export function SellForm({ base, categories }: Props) {
     if (photos.length === 0) return setError('Add at least one photo of your item');
     if (!form.condition) return setError('Choose the item’s condition');
     if (!form.priceCents) return setError('Enter your price');
+    if (!form.percent) return setError('Choose how much to donate to the locale');
     if (!form.consent) return setError('Please confirm the agreement to continue');
 
     try {
@@ -136,7 +137,7 @@ export function SellForm({ base, categories }: Props) {
         </div>
       </Section>
 
-      <Section title="Price" hint="Optionally donate part of the sale to the locale. Buyers only see your price, unless you choose 100%: those items are shown as “100% for Flagship”.">
+      <Section title="Price" hint="Choose how much of the sale to donate to the locale. Buyers only see your price, unless you choose 100%: those items are shown as “100% for Flagship”.">
         <LocaleSplitCalculator
           priceCents={form.priceCents}
           percent={form.percent}
@@ -144,6 +145,7 @@ export function SellForm({ base, categories }: Props) {
           priceLabel="Your price"
           receiveLabel="You’ll receive"
           allowCustom={false}
+          percentRequired
         />
       </Section>
 

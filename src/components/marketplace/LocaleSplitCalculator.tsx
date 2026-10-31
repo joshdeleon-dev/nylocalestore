@@ -10,6 +10,7 @@ interface Props {
   priceLabel?: string;
   receiveLabel?: string;
   allowCustom?: boolean; // sellers only get the quick picks; admins can enter any percentage
+  percentRequired?: boolean; // sellers must pick an option, so it can't be cleared back to 0%
 }
 
 const toDollars = (cents: number | null) => (cents == null ? '' : (cents / 100).toFixed(2));
@@ -17,7 +18,7 @@ const toDollars = (cents: number | null) => (cents == null ? '' : (cents / 100).
 // Price + voluntary "For Locale" donation, with a live breakdown.
 // Shared by the admin listing editor and (Phase 2) the public seller form.
 // Initial values are read once; give it a `key` to reset it for a different listing.
-export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabel = 'Asking price', receiveLabel = 'Seller receives', allowCustom = true }: Props) {
+export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabel = 'Asking price', receiveLabel = 'Seller receives', allowCustom = true, percentRequired = false }: Props) {
   const [priceText, setPriceText] = useState(toDollars(priceCents));
   // 0% (no donation) shows nothing selected; any other non-quick-pick value shows Custom
   const [custom, setCustom] = useState(percent !== 0 && !QUICK_PICK_PERCENTS.includes(percent));
@@ -37,7 +38,7 @@ export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabe
 
   // Tapping the selected quick pick again clears it back to no donation
   const pick = (p: number) => {
-    const next = !custom && percent === p ? 0 : p;
+    const next = !custom && percent === p && !percentRequired ? 0 : p;
     setCustom(false);
     setPercentText(String(next));
     onChange({ priceCents, percent: next });
@@ -64,7 +65,7 @@ export function LocaleSplitCalculator({ priceCents, percent, onChange, priceLabe
       </div>
 
       <div>
-        <label className="label">Donate to the locale (optional)</label>
+        <label className="label">{percentRequired ? 'Donate to the locale *' : 'Donate to the locale (optional)'}</label>
         <div className="flex flex-wrap gap-2">
           {QUICK_PICK_PERCENTS.map((p) => (
             <button

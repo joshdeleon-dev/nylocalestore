@@ -101,8 +101,8 @@ export const createListingSchema = listingFieldsSchema.extend({ seller: sellerSc
 // Public "Sell an item" form: no admin fields, at least one photo, explicit consent
 export const publicSubmissionSchema = listingFieldsSchema.omit({ admin_notes: true }).extend({
   asking_price_cents: priceCents.min(1, 'Enter a price'),
-  // Sellers pick a quick option or no donation; only admins can set other percentages
-  locale_percent: percent.refine((n) => n === 0 || QUICK_PICK_PERCENTS.includes(n), 'Choose 30%, 50% or 100%, or no donation'),
+  // Sellers must pick a quick option; only admins can set other percentages
+  locale_percent: percent.refine((n) => QUICK_PICK_PERCENTS.includes(n), 'Choose 30%, 50% or 100%'),
   seller: sellerSchema,
   paths: z.array(z.string()).min(1, 'Add at least one photo').max(10, 'At most 10 photos'),
   consent: z.literal(true, { errorMap: () => ({ message: 'Please confirm the agreement to continue' }) }),
