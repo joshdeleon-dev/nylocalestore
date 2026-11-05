@@ -69,14 +69,14 @@ export default function HeroSlider({ slides, autoPlayMs = 5000 }: HeroSliderProp
       <div className="absolute inset-0 z-20 flex items-center px-8 md:px-16 max-w-6xl mx-auto" style={{ gridArea: '1 / 1' }}>
         <div className="text-white max-w-xl">
           {slide.title && (
-            <h1 className="text-3xl md:text-5xl font-bold mb-3 drop-shadow-md">{slide.title}</h1>
+            <h2 className="font-serif text-3xl md:text-5xl font-medium mb-3 drop-shadow-md leading-tight">{slide.title}</h2>
           )}
           {slide.subtitle && (
             <p className="text-base md:text-xl text-white/90 mb-6 drop-shadow">{slide.subtitle}</p>
           )}
           <Link
             href={slide.cta_href || '/#menu'}
-            className="inline-block bg-white text-coffee-700 font-bold px-8 py-3 rounded-full hover:bg-white/90 transition-colors shadow-lg"
+            className="inline-block bg-white text-coffee-900 font-medium px-6 py-3 rounded-full hover:bg-coffee-50 transition-colors shadow-lg"
           >
             {slide.cta_text || 'Order Now'}
           </Link>
@@ -88,12 +88,14 @@ export default function HeroSlider({ slides, autoPlayMs = 5000 }: HeroSliderProp
         <>
           <button
             onClick={prev}
+            aria-label="Previous slide"
             className="absolute left-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 bg-black/30 hover:bg-black/50 rounded-full flex items-center justify-center text-white transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button
             onClick={next}
+            aria-label="Next slide"
             className="absolute right-3 top-1/2 -translate-y-1/2 z-30 w-10 h-10 bg-black/30 hover:bg-black/50 rounded-full flex items-center justify-center text-white transition-colors"
           >
             <ChevronRight className="w-5 h-5" />
@@ -105,6 +107,7 @@ export default function HeroSlider({ slides, autoPlayMs = 5000 }: HeroSliderProp
               <button
                 key={i}
                 onClick={() => setIdx(i)}
+                aria-label={`Show slide ${i + 1}`}
                 className={`w-2 h-2 rounded-full transition-all ${i === idx ? 'bg-white w-5' : 'bg-white/50'}`}
               />
             ))}

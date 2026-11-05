@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Category, Product, HeroSlide, Announcement } from '@/types';
-import Link from 'next/link';
-import { Coffee, Info, AlertTriangle, Tag, Calendar } from 'lucide-react';
+import { Coffee, Info, AlertTriangle, Tag, Calendar, Search } from 'lucide-react';
 import CustomerNav from '@/components/CustomerNav';
 import HeroSlider from '@/components/HeroSlider';
+import { CustomerFooter } from '@/components/food/CustomerFooter';
+import { FoodCard } from '@/components/food/FoodCard';
 
 const announcementIcons: Record<string, React.ElementType> = {
   info: Info,
@@ -23,6 +24,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [orderingActive, setOrderingActive] = useState(true);
+  const [search, setSearch] = useState('');
 
   const fetchData = async () => {
     try {
@@ -54,260 +56,144 @@ export default function Home() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, []);
 
+  // Search matches name and description, across every category (featured included)
+  const query = search.trim().toLowerCase();
+  const matches = (p: Product) => !query || `${p.name} ${p.description ?? ''}`.toLowerCase().includes(query);
   const featuredProducts = products.filter((p) => p.is_featured);
+  const browsing = !query && selectedCategory === null;
+  const results = products.filter((p) => matches(p) && (selectedCategory === null || p.category_id === selectedCategory));
+  // When browsing everything, non-featured items are grouped under their category
+  const sections = categories
+    .map((cat) => ({ cat, items: products.filter((p) => p.category_id === cat.id && !p.is_featured) }))
+    .filter((s) => s.items.length > 0);
+  const uncategorized = products.filter((p) => !p.is_featured && !categories.some((c) => c.id === p.category_id));
 
-  const filteredProducts = selectedCategory
-    ? products.filter((p) => p.category_id === selectedCategory)
-    : products.filter((p) => !p.is_featured);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-coffee-900">
-        <div className="text-center">
-          <Coffee className="w-8 h-8 mx-auto mb-3 text-coffee-400 animate-pulse" />
-          <p className="text-xs text-coffee-500 tracking-widest uppercase">Loading menu…</p>
-        </div>
-      </div>
-    );
-  }
+  const grid = 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5';
+  const chip = (active: boolean) =>
+    `whitespace-nowrap rounded-full px-4 py-1.5 text-sm border transition-colors ${
+      active ? 'bg-coffee-900 text-white border-coffee-900' : 'bg-white text-coffee-700 border-coffee-200 hover:bg-coffee-50'
+    }`;
 
   return (
-    <div className="min-h-screen bg-coffee-50">
-      <div className="sticky top-0 z-50">
-        {!orderingActive && (
-          <div className="bg-amber-400 border-b border-amber-500">
-            <div className="flex items-center justify-center gap-2 px-4 py-2.5">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-900" />
-              <span className="text-sm font-semibold text-amber-900">
-                Ordering is currently paused — we'll be back soon!
-              </span>
-            </div>
+    <div className="min-h-screen flex flex-col">
+      <CustomerNav paused={!orderingActive} />
+
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-5 py-8 sm:py-12">
+        <div className="mb-8">
+          <p className="text-xs font-semibold uppercase tracking-widest2 text-coffee-500 mb-2">New York · Order &amp; Pickup</p>
+          <h1 className="font-serif text-4xl sm:text-5xl font-medium text-coffee-900 leading-tight">
+            Made with love, <span className="italic">served with care</span>
+          </h1>
+          <p className="mt-3 text-coffee-600 max-w-xl">Order ahead and pick up your coffee and food at the Locale.</p>
+        </div>
+
+        {announcements.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2 mb-8">
+            {announcements.map((a) => {
+              const Icon = announcementIcons[a.type] ?? announcementIcons.info;
+              return (
+                <div key={a.id} className="flex gap-3 rounded-2xl border border-coffee-200 bg-white p-4">
+                  <span className="w-8 h-8 rounded-full bg-coffee-100 flex items-center justify-center flex-shrink-0">
+                    <Icon className="w-4 h-4 text-coffee-700" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-coffee-900 leading-snug">{a.title}</p>
+                    {a.body && <p className="text-sm text-coffee-600 mt-0.5 leading-relaxed">{a.body}</p>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-        <CustomerNav wide sticky={false} />
-      </div>
 
-      <div className="lg:grid lg:grid-cols-[380px_1fr]">
-
-        {/* ── Left: brand territory (dark, sticky) ── */}
-        <aside className="lg:sticky lg:top-14 lg:h-[calc(100vh-56px)] lg:overflow-y-auto bg-coffee-900 flex flex-col">
-
-          {/* Brand tagline */}
-          <div className="px-7 pt-8 pb-5 border-b border-white/10">
-            <p className="font-serif italic text-white text-[1.35rem] leading-relaxed font-normal">
-              Made with love,<br />served with care.
-            </p>
-            <p className="text-coffee-500 text-xs mt-3 tracking-widest2 uppercase font-medium">
-              New York · Order & Pickup
-            </p>
+        {heroSlides.length > 0 && (
+          <div className="mb-10 rounded-3xl overflow-hidden">
+            <HeroSlider slides={heroSlides} />
           </div>
+        )}
 
-          {/* Announcements */}
-          {announcements.length > 0 && (
-            <div className="px-4 pb-2 space-y-2">
-              {announcements.map((a) => {
-                const Icon = announcementIcons[a.type] ?? announcementIcons.info;
-                return (
-                  <div key={a.id} className="flex gap-3 p-3 rounded-lg bg-white/[0.07] border border-white/[0.10]">
-                    <Icon className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-coffee-400" />
-                    <div>
-                      <p className="text-white text-xs font-medium leading-snug">{a.title}</p>
-                      {a.body && (
-                        <p className="text-coffee-500 text-xs mt-0.5 leading-relaxed">{a.body}</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Hero Slider */}
-          <div className="p-4">
-            <div className="rounded-xl overflow-hidden">
-              <HeroSlider slides={heroSlides} />
-            </div>
+        <div id="menu" className="scroll-mt-24 space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-coffee-400" />
+            <input
+              type="search"
+              className="input pl-10 py-3 rounded-full"
+              placeholder="Search the menu…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search the menu"
+            />
           </div>
-
-          {/* Footer */}
-          <div className="mt-auto px-7 py-5">
-            <p className="text-coffee-700 text-xs">© NY Locale Store · New York</p>
-          </div>
-        </aside>
-
-        {/* ── Right: menu ── */}
-        <main className="bg-white min-h-screen" id="menu">
-
-          {/* Category tabs — sticky below nav (+ banner when ordering paused) */}
-          <div className={`sticky z-10 bg-white border-b border-coffee-100 ${orderingActive ? 'top-14' : 'top-[96px]'}`}>
-            <div className="flex overflow-x-auto scrollbar-none px-6">
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className={`flex-shrink-0 px-1 mr-5 py-3.5 text-sm font-medium border-b-2 transition-colors ${
-                  selectedCategory === null
-                    ? 'border-coffee-900 text-coffee-900'
-                    : 'border-transparent text-coffee-400 hover:text-coffee-700'
-                }`}
-              >
-                All
+          <div className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
+            <button type="button" className={chip(selectedCategory === null)} onClick={() => setSelectedCategory(null)}>All</button>
+            {categories.map((cat) => (
+              <button key={cat.id} type="button" className={chip(selectedCategory === cat.id)} onClick={() => setSelectedCategory(cat.id)}>
+                {cat.name}
               </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`flex-shrink-0 px-1 mr-5 py-3.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                    selectedCategory === cat.id
-                      ? 'border-coffee-900 text-coffee-900'
-                      : 'border-transparent text-coffee-400 hover:text-coffee-700'
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
+            ))}
           </div>
+        </div>
 
-          <div className="p-6 lg:p-8">
-
-            {/* Featured */}
-            {featuredProducts.length > 0 && !selectedCategory && (
-              <section className="mb-10">
-                <p className="text-[10px] font-semibold uppercase tracking-widest2 text-coffee-400 mb-4">
-                  Featured
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {featuredProducts.map((product) => {
-                    const soldOut = product.current_stock === null || product.current_stock === 0;
-                    const disabled = soldOut || !orderingActive;
-                    const El = disabled ? 'div' : Link;
-                    const props = disabled ? {} : { href: `/product/${product.id}` };
-                    return (
-                      <El
-                        key={product.id}
-                        {...(props as any)}
-                        className={`group block rounded-xl overflow-hidden border border-coffee-100 bg-white transition-all duration-300 ${
-                          disabled
-                            ? 'opacity-50 cursor-default'
-                            : 'hover:border-coffee-200 hover:shadow-[0_4px_20px_rgba(23,13,5,0.08)] cursor-pointer'
-                        }`}
-                      >
-                        <div className="relative h-52 bg-coffee-50 overflow-hidden">
-                          {product.image_url ? (
-                            <img
-                              src={product.image_url}
-                              alt={product.name}
-                              className={`w-full h-full object-cover transition-transform duration-700 ${!disabled && 'group-hover:scale-105'}`}
-                            />
-                          ) : (
-                            <div className="h-full flex items-center justify-center">
-                              <Coffee className="w-10 h-10 text-coffee-200" />
-                            </div>
-                          )}
-                          {soldOut ? (
-                            <div className="absolute inset-0 bg-coffee-900/50 flex items-center justify-center">
-                              <span className="bg-white text-coffee-900 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
-                                Sold Out
-                              </span>
-                            </div>
-                          ) : !orderingActive ? (
-                            <div className="absolute inset-0 bg-coffee-900/40 flex items-center justify-center">
-                              <span className="bg-white text-coffee-900 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
-                                Unavailable
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="absolute top-3 left-3 bg-white/95 text-coffee-700 text-[10px] font-semibold px-2.5 py-1 rounded-full tracking-wide uppercase">
-                              ✦ Featured
-                            </span>
-                          )}
-                        </div>
-                        <div className="p-4">
-                          <h3 className="text-coffee-900 font-medium text-sm leading-snug">{product.name}</h3>
-                          {product.description && (
-                            <p className="text-coffee-500 text-xs mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
-                          )}
-                          <div className="flex items-baseline justify-between mt-3">
-                            <span className="text-coffee-900 font-semibold">${product.base_price.toFixed(2)}</span>
-                            {!disabled && <span className="text-coffee-400 text-xs">Customize →</span>}
-                          </div>
-                        </div>
-                      </El>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {/* All / filtered products */}
-            {(filteredProducts.length > 0 || selectedCategory) && (
+        {loading ? (
+          <div className={`mt-8 ${grid}`} aria-busy="true" aria-label="Loading menu">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="rounded-2xl bg-white border border-coffee-100 overflow-hidden">
+                <div className="aspect-square bg-coffee-100 animate-pulse" />
+                <div className="p-4 space-y-2"><div className="h-4 w-16 bg-coffee-100 rounded animate-pulse" /><div className="h-3 w-28 bg-coffee-100 rounded animate-pulse" /></div>
+              </div>
+            ))}
+          </div>
+        ) : browsing ? (
+          <div className="mt-8 space-y-12">
+            {featuredProducts.length > 0 && (
               <section>
-                {!selectedCategory && featuredProducts.length > 0 && (
-                  <p className="text-[10px] font-semibold uppercase tracking-widest2 text-coffee-400 mb-4">
-                    Menu
-                  </p>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {filteredProducts.map((product) => {
-                    const soldOut = product.current_stock === null || product.current_stock === 0;
-                    const disabled = soldOut || !orderingActive;
-                    const El = disabled ? 'div' : Link;
-                    const props = disabled ? {} : { href: `/product/${product.id}` };
-                    return (
-                      <El
-                        key={product.id}
-                        {...(props as any)}
-                        className={`group block rounded-xl overflow-hidden border border-coffee-100 bg-white transition-all duration-300 ${
-                          disabled
-                            ? 'opacity-50 cursor-default'
-                            : 'hover:border-coffee-200 hover:shadow-[0_4px_20px_rgba(23,13,5,0.08)] cursor-pointer'
-                        }`}
-                      >
-                        <div className="relative h-48 bg-coffee-50 overflow-hidden">
-                          {product.image_url ? (
-                            <img
-                              src={product.image_url}
-                              alt={product.name}
-                              className={`w-full h-full object-cover transition-transform duration-700 ${!disabled && 'group-hover:scale-105'}`}
-                            />
-                          ) : (
-                            <div className="h-full flex items-center justify-center">
-                              <Coffee className="w-10 h-10 text-coffee-200" />
-                            </div>
-                          )}
-                          {(soldOut || !orderingActive) && (
-                            <div className="absolute inset-0 bg-coffee-900/50 flex items-center justify-center">
-                              <span className="bg-white text-coffee-900 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
-                                {soldOut ? 'Sold Out' : 'Unavailable'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-4">
-                          <h3 className="text-coffee-900 font-medium text-sm leading-snug">{product.name}</h3>
-                          {product.description && (
-                            <p className="text-coffee-500 text-xs mt-1 line-clamp-2 leading-relaxed">{product.description}</p>
-                          )}
-                          <div className="flex items-baseline justify-between mt-3">
-                            <span className="text-coffee-900 font-semibold">${product.base_price.toFixed(2)}</span>
-                            {!disabled && <span className="text-coffee-400 text-xs">Order →</span>}
-                          </div>
-                        </div>
-                      </El>
-                    );
-                  })}
+                <h2 className="font-serif text-2xl text-coffee-900 mb-4">Featured</h2>
+                <div className={grid}>
+                  {featuredProducts.map((p) => <FoodCard key={p.id} product={p} orderingActive={orderingActive} featured />)}
                 </div>
-
-                {filteredProducts.length === 0 && selectedCategory && (
-                  <div className="text-center py-20">
-                    <Coffee className="w-8 h-8 mx-auto mb-3 text-coffee-200" />
-                    <p className="text-coffee-400 text-sm">Nothing in this category yet</p>
-                  </div>
-                )}
               </section>
             )}
+            {sections.map(({ cat, items }) => (
+              <section key={cat.id}>
+                <h2 className="font-serif text-2xl text-coffee-900 mb-4">{cat.name}</h2>
+                <div className={grid}>
+                  {items.map((p) => <FoodCard key={p.id} product={p} orderingActive={orderingActive} />)}
+                </div>
+              </section>
+            ))}
+            {uncategorized.length > 0 && (
+              <section>
+                <h2 className="font-serif text-2xl text-coffee-900 mb-4">More</h2>
+                <div className={grid}>
+                  {uncategorized.map((p) => <FoodCard key={p.id} product={p} orderingActive={orderingActive} />)}
+                </div>
+              </section>
+            )}
+            {products.length === 0 && (
+              <div className="text-center py-20">
+                <Coffee className="w-8 h-8 mx-auto mb-3 text-coffee-300" />
+                <p className="text-coffee-500 text-sm">The menu is empty right now — check back soon.</p>
+              </div>
+            )}
           </div>
-        </main>
-      </div>
+        ) : (
+          <section className="mt-6">
+            <p className="text-sm text-coffee-500 mb-4">{results.length} item{results.length === 1 ? '' : 's'}</p>
+            {results.length > 0 ? (
+              <div className={grid}>
+                {results.map((p) => <FoodCard key={p.id} product={p} orderingActive={orderingActive} featured={p.is_featured} />)}
+              </div>
+            ) : (
+              <div className="text-center py-20">
+                <Coffee className="w-8 h-8 mx-auto mb-3 text-coffee-300" />
+                <p className="text-coffee-500 text-sm">{query ? 'Nothing on the menu matches your search.' : 'Nothing in this category yet.'}</p>
+              </div>
+            )}
+          </section>
+        )}
+      </main>
+
+      <CustomerFooter />
     </div>
   );
 }

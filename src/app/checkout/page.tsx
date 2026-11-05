@@ -7,6 +7,8 @@ import { formatCurrency, validatePhoneNumber } from '@/utils/helpers';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import CustomerNav from '@/components/CustomerNav';
+import { BackLink } from '@/components/food/BackLink';
+import { CustomerFooter } from '@/components/food/CustomerFooter';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -24,14 +26,15 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen bg-coffee-50 flex flex-col">
-        <CustomerNav backHref="/cart" backLabel="Cart" />
-        <div className="flex-1 flex items-center justify-center">
+      <div className="min-h-screen flex flex-col">
+        <CustomerNav />
+        <main className="flex-1 flex items-center justify-center px-5 py-20">
           <div className="text-center">
-            <h1 className="text-lg font-semibold text-coffee-900 mb-1">No items in your cart</h1>
-            <Link href="/" className="btn btn-primary mt-4">Back to Menu</Link>
+            <h1 className="font-serif text-3xl text-coffee-900">No items in your cart</h1>
+            <Link href="/#menu" className="btn btn-primary rounded-full px-6 mt-6">Back to the menu</Link>
           </div>
-        </div>
+        </main>
+        <CustomerFooter />
       </div>
     );
   }
@@ -106,20 +109,19 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div className="min-h-screen bg-coffee-50">
-      <CustomerNav backHref="/cart" backLabel="Cart" />
+    <div className="min-h-screen flex flex-col">
+      <CustomerNav />
 
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <h1 className="text-xl font-semibold text-coffee-900 mb-6">Checkout</h1>
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-5 py-6 sm:py-10">
+        <div className="mb-5"><BackLink href="/cart" label="Cart" /></div>
+        <h1 className="font-serif text-4xl font-medium text-coffee-900 mb-6">Checkout</h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="bg-white rounded-xl border border-coffee-100 p-6">
-              <h2 className="text-sm font-semibold text-coffee-900 uppercase tracking-wider mb-5">
-                Customer Information
-              </h2>
+            <div className="bg-white rounded-2xl border border-coffee-100 p-5 sm:p-6">
+              <h2 className="font-serif text-xl text-coffee-900 mb-5">Your details</h2>
 
               <div className="space-y-4">
                 <div>
@@ -149,14 +151,15 @@ export default function CheckoutPage() {
 
                 <div>
                   <label className="label">Group / Locale *</label>
-                  <div className="flex rounded-lg border border-coffee-200 overflow-hidden mb-2">
+                  <div className="flex gap-1 rounded-full border border-coffee-200 p-1 mb-2">
                     <button
                       type="button"
                       onClick={() => setIsOtherLocale(false)}
-                      className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                      aria-pressed={!isOtherLocale}
+                      className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
                         !isOtherLocale
                           ? 'bg-coffee-900 text-white'
-                          : 'bg-white text-coffee-500 hover:bg-coffee-50'
+                          : 'text-coffee-600 hover:bg-coffee-50'
                       }`}
                     >
                       Group Number
@@ -164,10 +167,11 @@ export default function CheckoutPage() {
                     <button
                       type="button"
                       onClick={() => setIsOtherLocale(true)}
-                      className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                      aria-pressed={isOtherLocale}
+                      className={`flex-1 py-2 rounded-full text-sm font-medium transition-colors ${
                         isOtherLocale
                           ? 'bg-coffee-900 text-white'
-                          : 'bg-white text-coffee-500 hover:bg-coffee-50'
+                          : 'text-coffee-600 hover:bg-coffee-50'
                       }`}
                     >
                       Other Locale
@@ -238,18 +242,16 @@ export default function CheckoutPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center bg-coffee-900 hover:bg-coffee-800 disabled:opacity-50 text-white rounded-xl px-5 py-3.5 font-medium text-sm transition-colors"
+              className="w-full flex items-center justify-center bg-coffee-900 hover:bg-coffee-700 disabled:opacity-50 text-white rounded-full px-5 py-3.5 font-medium transition-colors"
             >
-              {loading ? 'Placing Order…' : 'Place Order'}
+              {loading ? 'Placing order…' : 'Place order'}
             </button>
           </form>
 
           {/* Order summary */}
           <div>
-            <div className="bg-white rounded-xl border border-coffee-100 p-5 sticky top-20">
-              <h2 className="text-sm font-semibold text-coffee-900 uppercase tracking-wider mb-4">
-                Order Summary
-              </h2>
+            <div className="bg-white rounded-2xl border border-coffee-100 p-5 lg:sticky lg:top-24">
+              <h2 className="font-serif text-xl text-coffee-900 mb-4">Order summary</h2>
 
               <div className="space-y-3 mb-4 pb-4 border-b border-coffee-100">
                 {items.map((item) => (
@@ -297,7 +299,9 @@ export default function CheckoutPage() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
+
+      <CustomerFooter />
     </div>
   );
 }

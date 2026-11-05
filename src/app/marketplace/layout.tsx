@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { MapPin, Plus } from 'lucide-react';
 import { marketplaceBase } from '@/lib/marketplaceSite';
+import { SiteBar } from '@/components/SiteBar';
 import { FOOD_URL, HOME_URL } from '@/components/SiteChrome';
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export default async function MarketplaceLayout({ children }: { children: React.
 
   return (
     <div className="min-h-screen flex flex-col">
+      <SiteBar current="shop" />
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-coffee-200">
         <div className="max-w-6xl mx-auto px-4 sm:px-5 h-16 flex items-center justify-between gap-3">
           <Link href={base || '/'} className="min-w-0">
