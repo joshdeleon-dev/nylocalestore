@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ArrowLeft, ArrowUpRight, Banknote, MapPin, Search, Tag } from 'lucide-react';
 import { FOOD_URL, HOME_URL, SiteBackdrop, SiteHeader } from '@/components/SiteChrome';
+import { SiteBar } from '@/components/SiteBar';
 
 // Temporary page for shop.nylocalestore.com. Middleware rewrites every path on the
 // shop host here until the Marketplace launches.
@@ -20,6 +21,7 @@ const FEATURES = [
 export default function ComingSoonPage() {
   return (
     <div className="relative min-h-screen flex flex-col overflow-hidden">
+      <SiteBar current="shop" />
       <SiteBackdrop />
       <SiteHeader href={HOME_URL} />
 

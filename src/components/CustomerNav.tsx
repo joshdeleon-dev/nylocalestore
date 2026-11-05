@@ -1,64 +1,63 @@
 'use client';
 
 import { useCartStore } from '@/hooks/useCart';
-import { ShoppingBag, ArrowLeft, User } from 'lucide-react';
+import { AlertTriangle, ShoppingBag, User } from 'lucide-react';
 import Link from 'next/link';
+import { SiteBar } from '@/components/SiteBar';
 
 interface CustomerNavProps {
-  wide?: boolean;
-  backHref?: string;
-  backLabel?: string;
-  sticky?: boolean;
+  paused?: boolean; // shows the "ordering is paused" bar above the header
 }
 
-export default function CustomerNav({ wide = false, backHref, backLabel, sticky = true }: CustomerNavProps) {
+// Food storefront header, styled to match the marketplace header
+export default function CustomerNav({ paused = false }: CustomerNavProps) {
   const { items } = useCartStore();
   const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <header className={`${sticky ? 'sticky top-0 z-50' : ''} bg-white/95 backdrop-blur-md border-b border-coffee-200`}>
-      <div className={`${wide ? 'max-w-screen-2xl' : 'max-w-2xl'} mx-auto px-5 h-14 flex items-center justify-between relative`}>
-
-        {/* Left */}
-        <div className="flex items-center gap-5 z-10">
-          {backHref && (
-            <Link href={backHref} className="flex items-center gap-1.5 text-coffee-500 hover:text-coffee-900 transition-colors text-sm">
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>{backLabel || 'Back'}</span>
-            </Link>
-          )}
+    <>
+      <SiteBar current="food" />
+      <div className="sticky top-0 z-40">
+      {paused && (
+        <div className="bg-amber-400 border-b border-amber-500">
+          <div className="flex items-center justify-center gap-2 px-4 py-2.5">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-900" />
+            <span className="text-sm font-semibold text-amber-900">Ordering is currently paused — we’ll be back soon!</span>
+          </div>
         </div>
-
-        {/* Center */}
-        <Link href="/" className="absolute left-1/2 -translate-x-1/2">
-          <span className="font-serif text-base sm:text-2xl font-medium tracking-tight text-coffee-900 whitespace-nowrap">New York Locale Store</span>
-        </Link>
-
-        {/* Right */}
-        <nav className="flex items-center gap-0.5 z-10">
-          <Link
-            href="/#menu"
-            className="hidden sm:block text-sm text-coffee-600 hover:text-coffee-900 px-3 py-1.5 rounded-md hover:bg-coffee-50 transition-colors"
-          >
-            Menu
+      )}
+      <header className="bg-white/90 backdrop-blur-md border-b border-coffee-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-5 h-16 flex items-center justify-between gap-3">
+          <Link href="/" className="min-w-0">
+            <span className="block font-serif text-lg sm:text-xl font-medium tracking-tight text-coffee-900 leading-tight truncate">
+              New York Locale
+            </span>
+            <span className="block text-[11px] font-semibold uppercase tracking-widest2 text-coffee-500">Food &amp; Drinks</span>
           </Link>
-          <Link
-            href="/cart"
-            className="flex items-center gap-2 text-sm font-medium bg-coffee-900 hover:bg-coffee-800 text-white rounded-full transition-colors ml-1 px-3 py-1.5 sm:px-4"
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{cartCount > 0 ? `Cart · ${cartCount}` : 'Cart'}</span>
-            {cartCount > 0 && <span className="sm:hidden text-xs font-semibold">{cartCount}</span>}
-          </Link>
-          <Link
-            href="/auth/login"
-            className="ml-1 p-2 text-coffee-400 hover:text-coffee-700 hover:bg-coffee-100 rounded-md transition-colors"
-            title="Staff Login"
-          >
-            <User className="w-4 h-4" />
-          </Link>
-        </nav>
-      </div>
-    </header>
+          <nav className="flex items-center gap-1 sm:gap-2">
+            <Link href="/#menu" className="hidden sm:block text-sm text-coffee-600 hover:text-coffee-900 px-3 py-2 rounded-md hover:bg-coffee-50">
+              Menu
+            </Link>
+            <Link
+              href="/cart"
+              className="inline-flex items-center gap-1.5 rounded-full bg-coffee-900 text-white text-sm font-medium px-4 py-2 hover:bg-coffee-700 transition-colors"
+              aria-label={cartCount > 0 ? `Cart, ${cartCount} item${cartCount === 1 ? '' : 's'}` : 'Cart'}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              Cart
+              {cartCount > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-white text-coffee-900 text-xs font-semibold">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+            <Link href="/auth/login" className="p-2 text-coffee-400 hover:text-coffee-800 hover:bg-coffee-50 rounded-md transition-colors" title="Staff login" aria-label="Staff login">
+              <User className="w-4 h-4" />
+            </Link>
+          </nav>
+        </div>
+      </header>
+    </div>
+    </>
   );
 }

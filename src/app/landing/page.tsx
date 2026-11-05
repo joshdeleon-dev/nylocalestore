@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ArrowUpRight, Coffee, MapPin, Store } from 'lucide-react';
 import { FOOD_URL, SHOP_URL, SiteBackdrop, SiteHeader } from '@/components/SiteChrome';
+import { SiteBar } from '@/components/SiteBar';
 
 // Served at the root of www.nylocalestore.com via a host rewrite in middleware.
 // Self-contained: no Supabase, no cart, nothing shared with the food app.
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   return (
     <div className="relative min-h-screen flex flex-col overflow-hidden">
+      <SiteBar current="home" />
       <SiteBackdrop />
       <SiteHeader />
 

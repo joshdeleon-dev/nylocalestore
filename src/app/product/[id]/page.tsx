@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import { Product, ModifierGroup, Modifier } from '@/types';
 import { useCartStore } from '@/hooks/useCart';
 import { formatCurrency } from '@/utils/helpers';
-import { Coffee, Plus, Minus, Check, AlertTriangle } from 'lucide-react';
+import { Coffee, Plus, Minus, Check, Expand } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import CustomerNav from '@/components/CustomerNav';
+import { BackLink } from '@/components/food/BackLink';
+import { CustomerFooter } from '@/components/food/CustomerFooter';
+import { ImageLightbox } from '@/components/marketplace/ImageLightbox';
 import toast from 'react-hot-toast';
 
 interface ProductWithModifiers extends Product {
@@ -25,6 +28,7 @@ export default function ProductDetailPage() {
   const [notes, setNotes] = useState('');
   const [adding, setAdding] = useState(false);
   const [orderingActive, setOrderingActive] = useState(true);
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -134,8 +138,11 @@ export default function ProductDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-coffee-900">
-        <Coffee className="w-8 h-8 text-coffee-400 animate-pulse" />
+      <div className="min-h-screen flex flex-col">
+        <CustomerNav />
+        <div className="flex-1 flex items-center justify-center" aria-busy="true">
+          <Coffee className="w-8 h-8 text-coffee-300 animate-pulse" />
+        </div>
       </div>
     );
   }
@@ -143,167 +150,145 @@ export default function ProductDetailPage() {
   if (!product) return null;
 
   const soldOut = (product as any).current_stock === null || (product as any).current_stock === 0;
+  const unavailable = soldOut || !orderingActive;
 
   return (
-    <div className="min-h-screen bg-coffee-50">
-      <div className="sticky top-0 z-50">
-        {!orderingActive && (
-          <div className="bg-amber-400 border-b border-amber-500">
-            <div className="flex items-center justify-center gap-2 px-4 py-2.5">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-900" />
-              <span className="text-sm font-semibold text-amber-900">
-                Ordering is currently paused — we'll be back soon!
+    <div className="min-h-screen flex flex-col">
+      <CustomerNav paused={!orderingActive} />
+
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-5 py-6 sm:py-10 pb-32 lg:pb-10">
+        <div className="mb-5"><BackLink href="/#menu" label="Menu" /></div>
+
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12">
+          {/* Photo */}
+          <div className="relative aspect-square rounded-2xl overflow-hidden bg-coffee-100 lg:sticky lg:top-24 self-start w-full">
+            {product.image_url ? (
+              <button type="button" onClick={() => setZoomed(true)} className="group absolute inset-0 cursor-zoom-in focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-coffee-300" aria-label="Enlarge photo">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={product.image_url} alt={product.name} className={`w-full h-full object-cover ${soldOut ? 'grayscale opacity-60' : ''}`} />
+                <span className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/90 text-coffee-900 flex items-center justify-center shadow opacity-80 group-hover:opacity-100 transition-opacity">
+                  <Expand className="w-4 h-4" />
+                </span>
+              </button>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Coffee className="w-16 h-16 text-coffee-300" />
+              </div>
+            )}
+            {soldOut && (
+              <span className="absolute top-4 left-4 rounded-full bg-coffee-900 text-white text-xs font-semibold uppercase tracking-wider px-3.5 py-1.5">
+                Sold out
               </span>
-            </div>
+            )}
           </div>
-        )}
-        <CustomerNav backHref="/" backLabel="Menu" sticky={false} />
-      </div>
+          {zoomed && product.image_url && (
+            <ImageLightbox images={[product.image_url]} index={0} title={product.name} onIndexChange={() => {}} onClose={() => setZoomed(false)} />
+          )}
 
-      <div className="max-w-2xl mx-auto pb-32">
+          {/* Details */}
+          <div>
+            <h1 className="font-serif text-3xl sm:text-4xl font-medium text-coffee-900 leading-tight">{product.name}</h1>
+            <p className="text-2xl font-semibold text-coffee-900 mt-3">{formatCurrency(product.base_price)}</p>
+            {product.description && <p className="text-coffee-700 mt-4 leading-relaxed">{product.description}</p>}
 
-        {/* Product image */}
-        <div className="relative bg-coffee-100 overflow-hidden" style={{ height: '510px' }}>
-          {product.image_url ? (
-            <img
-              src={product.image_url}
-              alt={product.name}
-              className={`w-full h-full object-cover ${soldOut ? 'opacity-50' : ''}`}
-            />
-          ) : (
-            <div className="h-full flex items-center justify-center">
-              <Coffee className={`w-16 h-16 text-coffee-300 ${soldOut ? 'opacity-50' : ''}`} />
+            {/* Modifier groups */}
+            <div className="mt-8 space-y-6">
+              {product.modifier_groups.map((group) => {
+                const selected = selectedModifiers[group.id] || [];
+                const maxSel = group.max_selection ?? 1;
+                return (
+                  <fieldset key={group.id}>
+                    <div className="flex items-center justify-between mb-3">
+                      <legend className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-coffee-900">{group.name}</span>
+                        {group.is_required && (
+                          <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-coffee-900 text-white">Required</span>
+                        )}
+                      </legend>
+                      {maxSel > 1 && <span className="text-xs text-coffee-500">Pick up to {maxSel}</span>}
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      {group.modifiers?.sort((a, b) => a.display_order - b.display_order).map((mod) => {
+                        const isSelected = selected.includes(mod.id);
+                        return (
+                          <button
+                            key={mod.id}
+                            type="button"
+                            onClick={() => toggleModifier(group, mod.id)}
+                            aria-pressed={isSelected}
+                            className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-left transition-colors ${
+                              isSelected ? 'border-coffee-900 bg-coffee-50' : 'border-coffee-200 bg-white hover:bg-coffee-50/60'
+                            }`}
+                          >
+                            <span className="flex items-center gap-3 min-w-0">
+                              <span className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-coffee-900 bg-coffee-900' : 'border-coffee-300'}`}>
+                                {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                              </span>
+                              <span className={`text-sm font-medium ${isSelected ? 'text-coffee-900' : 'text-coffee-700'}`}>{mod.name}</span>
+                            </span>
+                            {mod.price_adjustment !== 0 && (
+                              <span className="text-xs text-coffee-500 flex-shrink-0">
+                                {mod.price_adjustment > 0 ? '+' : ''}
+                                {formatCurrency(mod.price_adjustment)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                );
+              })}
+
+              <div>
+                <label className="label" htmlFor="special-instructions">Special instructions</label>
+                <textarea
+                  id="special-instructions"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Any special requests or modifications…"
+                  className="textarea rounded-xl"
+                  rows={2}
+                />
+              </div>
             </div>
-          )}
-          {soldOut && (
-            <div className="absolute inset-0 bg-coffee-900/60 flex items-center justify-center">
-              <span className="bg-white text-coffee-900 text-xs font-semibold px-4 py-1.5 rounded-full uppercase tracking-widest">
-                Sold Out
-              </span>
-            </div>
-          )}
-        </div>
 
-        <div className="bg-white px-6 pt-6 pb-6 border-b border-coffee-100">
-          <h1 className="text-2xl font-semibold text-coffee-900 leading-tight">{product.name}</h1>
-          {product.description && (
-            <p className="text-coffee-500 mt-1.5 text-sm leading-relaxed">{product.description}</p>
-          )}
-          <p className="text-xl font-semibold text-coffee-900 mt-3">
-            {formatCurrency(product.base_price)}
-          </p>
-        </div>
-
-        {/* Modifier groups */}
-        {product.modifier_groups.map((group) => {
-          const selected = selectedModifiers[group.id] || [];
-          const maxSel = group.max_selection ?? 1;
-          return (
-            <div key={group.id} className="bg-white mt-2 px-6 py-5 border-b border-coffee-100">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-medium text-coffee-900 text-sm">{group.name}</h3>
-                  {group.is_required && (
-                    <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-coffee-900 text-white">
-                      Required
-                    </span>
-                  )}
-                </div>
-                {maxSel > 1 && (
-                  <span className="text-xs text-coffee-400">Pick up to {maxSel}</span>
+            {/* Add to order: pinned to the bottom on phones, inline on desktop */}
+            <div className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-coffee-200 px-4 py-3 lg:static lg:bg-transparent lg:border-0 lg:p-0 lg:mt-8">
+              <div className="max-w-6xl mx-auto flex items-center gap-3">
+                {unavailable ? (
+                  <div className="flex-1 rounded-full bg-coffee-100 px-5 py-3.5 text-center">
+                    <p className="text-sm font-medium text-coffee-600">{soldOut ? 'Currently sold out' : 'Ordering is currently paused'}</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 rounded-full border border-coffee-200 bg-white px-3 py-2.5">
+                      <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-coffee-100" aria-label="Decrease quantity">
+                        <Minus className="w-3.5 h-3.5 text-coffee-700" />
+                      </button>
+                      <span className="font-semibold text-coffee-900 w-5 text-center text-sm" aria-live="polite">{quantity}</span>
+                      <button type="button" onClick={() => setQuantity((q) => q + 1)} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-coffee-100" aria-label="Increase quantity">
+                        <Plus className="w-3.5 h-3.5 text-coffee-700" />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddToCart}
+                      disabled={!canAddToCart() || adding}
+                      className="flex-1 flex items-center justify-between rounded-full bg-coffee-900 hover:bg-coffee-700 disabled:opacity-50 text-white px-6 py-3.5 transition-colors"
+                    >
+                      <span className="text-sm font-medium">{adding ? 'Adding…' : 'Add to order'}</span>
+                      <span className="text-sm font-semibold">{formatCurrency(calculatePrice())}</span>
+                    </button>
+                  </>
                 )}
               </div>
-              <div className="space-y-2">
-                {group.modifiers?.sort((a, b) => a.display_order - b.display_order).map((mod) => {
-                  const isSelected = selected.includes(mod.id);
-                  return (
-                    <button
-                      key={mod.id}
-                      onClick={() => toggleModifier(group, mod.id)}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all text-left ${
-                        isSelected
-                          ? 'border-coffee-900 bg-coffee-50'
-                          : 'border-coffee-100 hover:border-coffee-200 bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-4.5 h-4.5 w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                            isSelected ? 'border-coffee-900 bg-coffee-900' : 'border-coffee-300'
-                          }`}
-                        >
-                          {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
-                        </div>
-                        <span className={`text-sm font-medium ${isSelected ? 'text-coffee-900' : 'text-coffee-700'}`}>
-                          {mod.name}
-                        </span>
-                      </div>
-                      {mod.price_adjustment !== 0 && (
-                        <span className="text-xs text-coffee-500">
-                          {mod.price_adjustment > 0 ? '+' : ''}
-                          {formatCurrency(mod.price_adjustment)}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
-          );
-        })}
-
-        {/* Special instructions */}
-        <div className="bg-white mt-2 px-6 py-5">
-          <label className="label">Special Instructions</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Any special requests or modifications…"
-            className="textarea"
-            rows={2}
-          />
+          </div>
         </div>
-      </div>
+      </main>
 
-      {/* Sticky add-to-cart bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-coffee-100 px-4 py-4 z-50">
-        <div className="max-w-2xl mx-auto flex items-center gap-3">
-          {soldOut || !orderingActive ? (
-            <div className="flex-1 bg-coffee-100 rounded-xl px-5 py-3 text-center">
-              <p className="text-sm font-medium text-coffee-500">
-                {soldOut ? 'Currently sold out' : 'Ordering is currently paused'}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-3 bg-coffee-50 border border-coffee-100 rounded-xl px-3 py-2.5">
-                <button
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-coffee-100 transition-colors"
-                >
-                  <Minus className="w-3.5 h-3.5 text-coffee-700" />
-                </button>
-                <span className="font-semibold text-coffee-900 w-5 text-center text-sm">{quantity}</span>
-                <button
-                  onClick={() => setQuantity((q) => q + 1)}
-                  className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-coffee-100 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5 text-coffee-700" />
-                </button>
-              </div>
-
-              <button
-                onClick={handleAddToCart}
-                disabled={!canAddToCart() || adding}
-                className="flex-1 flex items-center justify-between bg-coffee-900 hover:bg-coffee-800 disabled:opacity-50 text-white rounded-xl px-5 py-3 transition-colors"
-              >
-                <span className="text-sm font-medium">{adding ? 'Adding…' : 'Add to Order'}</span>
-                <span className="text-sm font-semibold">{formatCurrency(calculatePrice())}</span>
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      <CustomerFooter />
     </div>
   );
 }

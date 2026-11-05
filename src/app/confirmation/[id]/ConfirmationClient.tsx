@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { CheckCircle2, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CustomerNav from '@/components/CustomerNav';
+import { CustomerFooter } from '@/components/food/CustomerFooter';
 
 export default function ConfirmationClient({ id }: { id: string }) {
   const [order, setOrder] = useState<Order | null>(null);
@@ -34,22 +35,26 @@ export default function ConfirmationClient({ id }: { id: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-coffee-50">
-        <p className="text-coffee-400 text-sm">Loading order details…</p>
+      <div className="min-h-screen flex flex-col">
+        <CustomerNav />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-coffee-500 text-sm">Loading order details…</p>
+        </div>
       </div>
     );
   }
 
   if (!order) {
     return (
-      <div className="min-h-screen bg-coffee-50 flex flex-col">
+      <div className="min-h-screen flex flex-col">
         <CustomerNav />
-        <div className="flex-1 flex items-center justify-center">
+        <main className="flex-1 flex items-center justify-center px-5 py-20">
           <div className="text-center">
-            <p className="text-coffee-500 text-sm mb-4">Order not found</p>
-            <Link href="/" className="btn btn-primary">Back to Menu</Link>
+            <h1 className="font-serif text-3xl text-coffee-900">Order not found</h1>
+            <Link href="/#menu" className="btn btn-primary rounded-full px-6 mt-6">Back to the menu</Link>
           </div>
-        </div>
+        </main>
+        <CustomerFooter />
       </div>
     );
   }
@@ -63,22 +68,22 @@ export default function ConfirmationClient({ id }: { id: string }) {
   const localeName = (order as any).customer_locale || 'Other Locale';
 
   return (
-    <div className="min-h-screen bg-coffee-50">
+    <div className="min-h-screen flex flex-col">
       <CustomerNav />
 
-      <div className="max-w-xl mx-auto px-4 py-10">
+      <main className="flex-1 max-w-xl w-full mx-auto px-4 py-10">
 
         {/* Success header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-coffee-900 mb-4">
             <CheckCircle2 className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-2xl font-semibold text-coffee-900 mb-1">Order Confirmed</h1>
-          <p className="text-coffee-500 text-sm">Your order has been placed successfully</p>
+          <h1 className="font-serif text-4xl font-medium text-coffee-900 mb-2">Order confirmed</h1>
+          <p className="text-coffee-600">Your order has been placed successfully.</p>
         </div>
 
         {/* Order card */}
-        <div className="bg-white rounded-xl border border-coffee-100 overflow-hidden mb-4">
+        <div className="bg-white rounded-2xl border border-coffee-100 overflow-hidden mb-4">
 
           {/* Order number */}
           <div className="px-6 py-5 border-b border-coffee-100 flex items-center justify-between">
@@ -88,7 +93,8 @@ export default function ConfirmationClient({ id }: { id: string }) {
             </div>
             <button
               onClick={copyOrderNumber}
-              className="p-2.5 hover:bg-coffee-50 rounded-lg transition-colors text-coffee-400 hover:text-coffee-700"
+              aria-label="Copy order number"
+              className="p-2.5 hover:bg-coffee-50 rounded-full transition-colors text-coffee-400 hover:text-coffee-700"
             >
               <Copy className="w-4 h-4" />
             </button>
@@ -174,7 +180,7 @@ export default function ConfirmationClient({ id }: { id: string }) {
         </div>
 
         {/* What's next */}
-        <div className="bg-coffee-900 rounded-xl p-5 mb-6 text-white">
+        <div className="bg-coffee-900 rounded-2xl p-5 sm:p-6 mb-6 text-white">
           <p className="text-xs font-semibold uppercase tracking-wider text-coffee-400 mb-3">What's Next</p>
           <ul className="space-y-2 text-sm text-coffee-200">
             <li className="flex items-start gap-2">
@@ -202,18 +208,20 @@ export default function ConfirmationClient({ id }: { id: string }) {
         <div className="grid grid-cols-2 gap-3">
           <Link
             href="/"
-            className="flex items-center justify-center border border-coffee-200 text-coffee-700 hover:bg-coffee-50 rounded-xl px-5 py-3 text-sm font-medium transition-colors"
+            className="flex items-center justify-center border border-coffee-200 text-coffee-700 hover:bg-coffee-50 rounded-full px-5 py-3 text-sm font-medium transition-colors"
           >
-            Browse Menu
+            Browse the menu
           </Link>
           <Link
             href="/"
-            className="flex items-center justify-center bg-coffee-900 hover:bg-coffee-800 text-white rounded-xl px-5 py-3 text-sm font-medium transition-colors"
+            className="flex items-center justify-center bg-coffee-900 hover:bg-coffee-700 text-white rounded-full px-5 py-3 text-sm font-medium transition-colors"
           >
-            Order Again
+            Order again
           </Link>
         </div>
-      </div>
+      </main>
+
+      <CustomerFooter />
     </div>
   );
 }
