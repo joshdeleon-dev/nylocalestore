@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse, after } from 'next/server';
-import { sendEmail } from '@/lib/email';
+import { adminRecipients, sendEmail } from '@/lib/email';
 import { MAX_OPEN_RESERVATIONS, cleanGroup, firstZodError, formatPickup, normalizeEmail, normalizePhone, reservationSchema } from '@/lib/marketplace';
-import { buyerReservationEmail } from '@/lib/marketplaceEmails';
+import { adminReservationEmail, buyerReservationEmail } from '@/lib/marketplaceEmails';
 import { isMarketplaceEnabled } from '@/lib/marketplaceSite';
-import { audit, db, marketplaceUrl, newReservationToken } from '@/lib/marketplaceServer';
+import { adminDashboardUrl, audit, db, marketplaceUrl, newReservationToken } from '@/lib/marketplaceServer';
 
 // Public: reserve a published item. Emails the buyer a confirmation and returns the token for their private link.
 export async function POST(req: NextRequest) {
@@ -60,8 +60,15 @@ export async function POST(req: NextRequest) {
     to: r.buyer_email, name: r.buyer_name, reservationId, title: listing.title, priceCents: listing.asking_price_cents,
     pickup: formatPickup(r), group, noGroupReason: reason, reservationUrl: marketplaceUrl(req, `/reservation/${token}`),
   });
+  const staff = adminRecipients();
+  const alert = staff.length ? adminReservationEmail({
+    to: staff, reservationId, title: listing.title, priceCents: listing.asking_price_cents,
+    buyerName: r.buyer_name, buyerEmail: r.buyer_email, buyerPhone: r.buyer_phone, pickup: formatPickup(r),
+    group, noGroupReason: reason, dashboardUrl: adminDashboardUrl(req),
+  }) : null;
   after(async () => {
-    if (await sendEmail(email)) await audit(null, 'reservation', reservationId, 'buyer_emailed', null, { type: 'reservation_confirmation' });
+    const [sent] = await Promise.all([sendEmail(email), alert && sendEmail(alert)]);
+    if (sent) await audit(null, 'reservation', reservationId, 'buyer_emailed', null, { type: 'reservation_confirmation' });
   });
   return NextResponse.json({ success: true, token }, { status: 201 });
 }

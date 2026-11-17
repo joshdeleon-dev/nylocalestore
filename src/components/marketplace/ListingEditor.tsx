@@ -107,6 +107,17 @@ export function ListingEditor({ listingId, categories, onClose, onChanged, canDe
   useEffect(() => { if (listingId != null) load(listingId); }, [listingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setField = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
+
+  // "100% for Flagship" means a 100% donation: ticking sets For Locale to 100%, unticking restores
+  // the previous percentage. The calculator reads its values once, so it's reset after each change.
+  const [calcVersion, setCalcVersion] = useState(0);
+  const [percentBeforeFlagship, setPercentBeforeFlagship] = useState<number | null>(null);
+  const setFlagship = (on: boolean) => {
+    if (on) setPercentBeforeFlagship(form.locale_percent === 100 ? null : form.locale_percent);
+    const percent = on ? 100 : form.locale_percent === 100 ? percentBeforeFlagship ?? 0 : form.locale_percent;
+    setForm((f) => ({ ...f, locale_percent: percent, flagship_manual: false }));
+    setCalcVersion((v) => v + 1);
+  };
   const setSeller = (key: keyof typeof form.seller, value: string) => setForm((f) => ({ ...f, seller: { ...f.seller, [key]: value } }));
 
   const save = async (e: React.FormEvent) => {
@@ -453,29 +464,29 @@ export function ListingEditor({ listingId, categories, onClose, onChanged, canDe
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold text-gray-900">Price & For Locale</h3>
                 <LocaleSplitCalculator
-                  key={listing?.id ?? 'new'}
+                  key={`${listing?.id ?? 'new'}-${calcVersion}`}
                   priceCents={form.asking_price_cents}
                   percent={form.locale_percent}
                   onChange={({ priceCents, percent }) => setForm((f) => ({ ...f, asking_price_cents: priceCents, locale_percent: percent }))}
                 />
-                <label className={`flex items-start gap-2 text-sm ${readOnly || form.locale_percent === 100 ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                <label className={`flex items-start gap-2 text-sm ${readOnly ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                   <input
                     type="checkbox"
                     className="checkbox mt-0.5"
                     checked={form.locale_percent === 100 || form.flagship_manual}
-                    disabled={readOnly || form.locale_percent === 100}
-                    onChange={(e) => setField('flagship_manual', e.target.checked)}
+                    disabled={readOnly}
+                    onChange={(e) => setFlagship(e.target.checked)}
                   />
                   <span>
                     <span className="font-medium text-gray-900">100% for Flagship</span>
                     {form.locale_percent === 100 ? (
-                      <span className="block text-xs text-coffee-500">Automatic: this item donates 100% to the locale.</span>
+                      <span className="block text-xs text-coffee-500">This item donates 100% to the locale and shows in the Shop for Flagship section.</span>
                     ) : form.flagship_manual ? (
                       <span className="block text-xs text-amber-700">
-                        Marked manually. Buyers will be told 100% of this sale is donated, but For Locale is {form.locale_percent}%.
+                        Marked before the donation was tied to it: For Locale is {form.locale_percent}%. Untick, then tick again to set 100%.
                       </span>
                     ) : (
-                      <span className="block text-xs text-coffee-500">Shows this item in the Shop for Flagship section.</span>
+                      <span className="block text-xs text-coffee-500">Ticking sets For Locale to 100% and shows this item in the Shop for Flagship section.</span>
                     )}
                   </span>
                 </label>

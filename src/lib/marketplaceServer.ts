@@ -3,7 +3,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { slugify } from '@/lib/marketplace';
-import { NON_SHOP_SITE_HOSTS, SHOP_ORIGIN, marketplaceBase, normalizeHost } from '@/lib/marketplaceSite';
+import { NON_SHOP_SITE_HOSTS, SHOP_HOSTS, SHOP_ORIGIN, marketplaceBase, normalizeHost } from '@/lib/marketplaceSite';
 import { MarketplaceListingImage } from '@/types/marketplace';
 
 export const db = supabaseAdmin ?? supabase;
@@ -142,6 +142,16 @@ export function marketplaceUrl(req: { headers: Headers; nextUrl: URL }, path: st
   const host = normalizeHost(req.headers.get('host'));
   if (NON_SHOP_SITE_HOSTS.includes(host)) return `${SHOP_ORIGIN}${path}`;
   return `${req.nextUrl.origin}${marketplaceBase(host)}${path}`;
+}
+
+// Staff marketplace dashboard, for alert emails. The dashboards live on the food host, not the
+// shop host: production shop → food.nylocalestore.com; shop-staging → this deployment's branch URL.
+export function adminDashboardUrl(req: { headers: Headers; nextUrl: URL }) {
+  const host = normalizeHost(req.headers.get('host'));
+  const path = '/dashboard/admin/marketplace';
+  if (host === 'shop.nylocalestore.com') return `https://food.nylocalestore.com${path}`;
+  if (SHOP_HOSTS.includes(host) && process.env.VERCEL_BRANCH_URL) return `https://${process.env.VERCEL_BRANCH_URL}${path}`;
+  return `${req.nextUrl.origin}${path}`;
 }
 
 // Private links (buyer's reservation, seller's tracking page): random token in the URL,
