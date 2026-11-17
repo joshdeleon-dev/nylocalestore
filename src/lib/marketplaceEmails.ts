@@ -33,7 +33,7 @@ function layout(heading: string, intro: string, rows: [string, string][], button
 const plain = (heading: string, intro: string, rows: [string, string][], button: { label: string; url: string }, footer: string) =>
   [heading, '', intro, '', ...rows.map(([k, v]) => `${k}: ${v}`), '', `${button.label}: ${button.url}`, '', footer, '', 'NY Locale Store · New York'].join('\n');
 
-function build(to: string, subject: string, key: string, heading: string, intro: string, rows: [string, string][], button: { label: string; url: string }, footer: string): EmailMessage {
+function build(to: string | string[], subject: string, key: string, heading: string, intro: string, rows: [string, string][], button: { label: string; url: string }, footer: string): EmailMessage {
   return { to, subject, idempotencyKey: key, html: layout(heading, intro, rows, button, footer), text: plain(heading, intro, rows, button, footer) };
 }
 
@@ -60,6 +60,61 @@ export function sellerSubmissionEmail(p: {
     ],
     { label: 'Track your item', url: p.trackUrl },
     'Keep this email — the link is private to you. Contact us at the Locale if anything looks wrong.',
+  );
+}
+
+// ── Staff alerts ─────────────────────────────────────────────────────────────
+
+export function adminSubmissionEmail(p: {
+  to: string[]; reference: number; title: string; priceCents: number; percent: number;
+  sellerName: string; sellerEmail: string; sellerPhone: string;
+  group: number | null; noGroupReason: string | null; photoCount: number; dashboardUrl: string;
+}) {
+  return build(
+    p.to,
+    `New item to review: ${p.title} — ${formatCents(p.priceCents)} (#${p.reference})`,
+    `mp-admin-submitted-${p.reference}`,
+    'New item submitted',
+    `${p.sellerName} submitted an item for the marketplace. It’s waiting for review.`,
+    [
+      ['Reference', `#${p.reference}`],
+      ['Item', p.title],
+      ['Price', formatCents(p.priceCents)],
+      ['For Locale', `${p.percent}%`],
+      ['Photos', String(p.photoCount)],
+      ['Seller', p.sellerName],
+      ['Email', p.sellerEmail],
+      ['Phone', p.sellerPhone],
+      ['Group', groupLabel(p.group, p.noGroupReason) + (p.noGroupReason ? ` (${p.noGroupReason})` : '')],
+    ],
+    { label: 'Review in dashboard', url: p.dashboardUrl },
+    'You’re getting this because your address is in MARKETPLACE_ADMIN_EMAILS.',
+  );
+}
+
+export function adminReservationEmail(p: {
+  to: string[]; reservationId: number; title: string; priceCents: number;
+  buyerName: string; buyerEmail: string; buyerPhone: string; pickup: string;
+  group: number | null; noGroupReason: string | null; dashboardUrl: string;
+}) {
+  return build(
+    p.to,
+    `New reservation: ${p.title} — ${formatCents(p.priceCents)} (${p.buyerName})`,
+    `mp-admin-reserved-${p.reservationId}`,
+    'Item reserved',
+    `${p.buyerName} reserved an item. Contact them to arrange pickup.`,
+    [
+      ['Reservation', `#${p.reservationId}`],
+      ['Item', p.title],
+      ['Price', formatCents(p.priceCents)],
+      ['Buyer', p.buyerName],
+      ['Email', p.buyerEmail],
+      ['Phone', p.buyerPhone],
+      ['Pickup', p.pickup],
+      ['Group', groupLabel(p.group, p.noGroupReason) + (p.noGroupReason ? ` (${p.noGroupReason})` : '')],
+    ],
+    { label: 'Open reservations', url: p.dashboardUrl },
+    'You’re getting this because your address is in MARKETPLACE_ADMIN_EMAILS.',
   );
 }
 

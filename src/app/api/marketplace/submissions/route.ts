@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse, after } from 'next/server';
-import { sendEmail } from '@/lib/email';
+import { adminRecipients, sendEmail } from '@/lib/email';
 import { calcLocaleSplit, cleanGroup, firstZodError, publicSubmissionSchema } from '@/lib/marketplace';
-import { sellerSubmissionEmail } from '@/lib/marketplaceEmails';
+import { adminSubmissionEmail, sellerSubmissionEmail } from '@/lib/marketplaceEmails';
 import { isMarketplaceEnabled } from '@/lib/marketplaceSite';
 import {
-  audit, createUploadUrls, db, marketplaceUrl, newReservationToken, uniqueSlug, verifyUploads, UploadError, MAX_IMAGES_PER_LISTING,
+  adminDashboardUrl, audit, createUploadUrls, db, marketplaceUrl, newReservationToken, uniqueSlug, verifyUploads, UploadError, MAX_IMAGES_PER_LISTING,
 } from '@/lib/marketplaceServer';
 
 // Public "Sell an item" endpoint, in two steps (photos upload straight to private storage):
@@ -84,8 +84,15 @@ export async function POST(req: NextRequest) {
       priceCents: fields.asking_price_cents, percent: fields.locale_percent, localeCents: split.localeCents, payoutCents: split.payoutCents,
       group, noGroupReason: reason, trackUrl: marketplaceUrl(req, `/track/${tracking.token}`),
     });
+    const staff = adminRecipients();
+    const alert = staff.length ? adminSubmissionEmail({
+      to: staff, reference: listing.id, title: fields.title, priceCents: fields.asking_price_cents, percent: fields.locale_percent,
+      sellerName: seller.name, sellerEmail: seller.email, sellerPhone: seller.phone,
+      group, noGroupReason: reason, photoCount: paths.length, dashboardUrl: adminDashboardUrl(req),
+    }) : null;
     after(async () => {
-      if (await sendEmail(email)) await audit(null, 'listing', listing.id, 'seller_emailed', null, { type: 'submission_confirmation' });
+      const [sent] = await Promise.all([sendEmail(email), alert && sendEmail(alert)]);
+      if (sent) await audit(null, 'listing', listing.id, 'seller_emailed', null, { type: 'submission_confirmation' });
     });
 
     return NextResponse.json({ success: true, reference: listing.id, tracking_token: tracking.token }, { status: 201 });

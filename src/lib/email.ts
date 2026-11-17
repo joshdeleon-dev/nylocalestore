@@ -4,7 +4,7 @@
 const DEFAULT_FROM = 'NY Locale Marketplace <marketplace@nylocalestore.com>';
 
 export interface EmailMessage {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   text: string;
@@ -28,7 +28,7 @@ export async function sendEmail(msg: EmailMessage): Promise<boolean> {
       },
       body: JSON.stringify({
         from: process.env.MARKETPLACE_EMAIL_FROM || DEFAULT_FROM,
-        to: [msg.to],
+        to: Array.isArray(msg.to) ? msg.to : [msg.to],
         ...(process.env.MARKETPLACE_EMAIL_REPLY_TO ? { reply_to: process.env.MARKETPLACE_EMAIL_REPLY_TO } : {}),
         subject: msg.subject,
         html: msg.html,
@@ -46,6 +46,10 @@ export async function sendEmail(msg: EmailMessage): Promise<boolean> {
     return false;
   }
 }
+
+// Staff who get an alert for each new submission and reservation (comma-separated in Vercel)
+export const adminRecipients = () =>
+  (process.env.MARKETPLACE_ADMIN_EMAILS ?? '').split(',').map((e) => e.trim()).filter(Boolean);
 
 export const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
