@@ -12,6 +12,9 @@ export const metadata: Metadata = {
 };
 
 export default function LandingPage() {
+  // The Marketplace card says "Coming Soon" until the marketplace flag is on
+  const marketplaceLive = process.env.MARKETPLACE_ENABLED === 'true';
+
   return (
     <div className="relative min-h-screen flex flex-col overflow-hidden">
       <SiteBar current="home" />
@@ -76,10 +79,16 @@ export default function LandingPage() {
 
               <div className="relative flex items-center justify-between">
                 <span className="text-xs font-semibold tracking-widest2 text-coffee-400">02</span>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-coffee-900 text-white text-[11px] font-semibold uppercase tracking-wider px-3 py-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                  Coming Soon
-                </span>
+                {marketplaceLive ? (
+                  <span className="w-12 h-12 rounded-full bg-coffee-900 text-white flex items-center justify-center transition-transform duration-300 group-hover:rotate-45">
+                    <ArrowUpRight className="w-5 h-5" />
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-coffee-900 text-white text-[11px] font-semibold uppercase tracking-wider px-3 py-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    Coming Soon
+                  </span>
+                )}
               </div>
 
               <div className="relative">
@@ -88,7 +97,7 @@ export default function LandingPage() {
                   Pre-loved items from our local community, inspected and picked up in person.
                 </p>
                 <span className="inline-flex items-center gap-1.5 text-sm font-medium text-coffee-700 border-b border-coffee-300 pb-0.5 group-hover:border-coffee-700 transition-colors">
-                  Take a peek
+                  {marketplaceLive ? 'Shop the marketplace' : 'Take a peek'}
                   <ArrowUpRight className="w-4 h-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                 </span>
               </div>
