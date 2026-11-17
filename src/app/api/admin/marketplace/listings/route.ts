@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
-import { createListingSchema, firstZodError } from '@/lib/marketplace';
+import { createListingSchema, firstZodError, sellerGroupColumns } from '@/lib/marketplace';
 import { audit, db, uniqueSlug, withSignedUrls } from '@/lib/marketplaceServer';
 
 const LIST_SELECT =
-  '*, seller:marketplace_sellers(id, name, email, phone), category:marketplace_categories(id, name), images:marketplace_listing_images(id, listing_id, storage_path, public_path, sort_order)';
+  '*, seller:marketplace_sellers(id, name, email, phone, group_number, no_group_reason), category:marketplace_categories(id, name), images:marketplace_listing_images(id, listing_id, storage_path, public_path, sort_order)';
 
 // ?status=submitted | ?status=published,unpublished | ?q=search | ?archived=1 (only archived items; hidden otherwise)
 export async function GET(req: NextRequest) {
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   const { data: sellerRow, error: sellerError } = await db
     .from('marketplace_sellers')
-    .insert({ ...seller, consent_at: new Date().toISOString() })
+    .insert({ ...seller, ...sellerGroupColumns(seller), consent_at: new Date().toISOString() })
     .select()
     .single();
   if (sellerError) return NextResponse.json({ success: false, error: sellerError.message }, { status: 500 });

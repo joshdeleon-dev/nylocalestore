@@ -6,9 +6,11 @@ import { marketplaceBase } from '@/lib/marketplaceSite';
 
 export const metadata: Metadata = { title: 'Thanks for your submission' };
 
-export default async function SellThanksPage({ searchParams }: { searchParams: Promise<{ ref?: string }> }) {
+export default async function SellThanksPage({ searchParams }: { searchParams: Promise<{ ref?: string; t?: string }> }) {
   const base = marketplaceBase((await headers()).get('host'));
-  const ref = (await searchParams).ref?.replace(/\D/g, '');
+  const { ref: rawRef, t } = await searchParams;
+  const ref = rawRef?.replace(/\D/g, '');
+  const token = t && /^[A-Za-z0-9_-]{20,64}$/.test(t) ? t : null;
 
   return (
     <div className="max-w-lg mx-auto px-5 py-20 text-center">
@@ -16,11 +18,17 @@ export default async function SellThanksPage({ searchParams }: { searchParams: P
       <h1 className="font-serif text-3xl text-coffee-900">Thanks — we’ve got it!</h1>
       <p className="text-coffee-600 mt-3">
         Our team will review your item and reach out by phone or email. Once it’s approved, it will appear in the marketplace.
+        We’ve emailed you a private link to follow your item from review to payout.
       </p>
       {ref && <p className="text-sm text-coffee-500 mt-4">Your reference number is <span className="font-semibold text-coffee-800">#{ref}</span></p>}
-      <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8">
+      {token && (
+        <Link href={`${base}/track/${token}`} className="inline-flex items-center justify-center rounded-full bg-coffee-900 text-white font-medium px-6 py-3 mt-8 hover:bg-coffee-700 transition-colors">
+          Track your item
+        </Link>
+      )}
+      <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
         <Link href={`${base}/sell`} className="btn btn-outline rounded-full px-6">Sell another item</Link>
-        <Link href={base || '/'} className="btn btn-primary rounded-full px-6">Browse the marketplace</Link>
+        <Link href={base || '/'} className="btn btn-outline rounded-full px-6">Browse the marketplace</Link>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, MapPin, Truck } from 'lucide-react';
 import { MAX_OPEN_RESERVATIONS } from '@/lib/marketplace';
 import { PickupType } from '@/types/marketplace';
+import { GroupField, GroupValue, emptyGroup, groupError, groupPayload } from './GroupField';
 
 // Pickup choice (Locale / Other address) is hidden for now: everything is picked up at the
 // Locale. The database and API still support 'other' — set this to true to bring the options back.
@@ -16,10 +17,14 @@ const emptyForm = {
   pickup_street: '', pickup_unit: '', pickup_city: '', pickup_state: 'NY', pickup_zip: '',
 };
 
+// The reservation API names the buyer's group fields buyer_group_number / buyer_no_group_reason
+const prefixed = (g: ReturnType<typeof groupPayload>) => ({ buyer_group_number: g.group_number, buyer_no_group_reason: g.no_group_reason });
+
 export function ReserveForm({ slug, base }: { slug: string; base: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [group, setGroup] = useState<GroupValue>(emptyGroup);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -28,12 +33,13 @@ export function ReserveForm({ slug, base }: { slug: string; base: string }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (groupError(group)) return setError(groupError(group));
     setBusy(true);
     try {
       const res = await fetch('/api/marketplace/reservations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug, ...form }),
+        body: JSON.stringify({ slug, ...form, ...prefixed(groupPayload(group)) }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -82,7 +88,7 @@ export function ReserveForm({ slug, base }: { slug: string; base: string }) {
     <form onSubmit={submit} className="rounded-2xl border border-coffee-200 bg-white p-5 space-y-4">
       <div>
         <h2 className="font-serif text-xl text-coffee-900">Reserve this item</h2>
-        <p className="text-sm text-coffee-500 mt-0.5">We’ll hold it for you and reach out to arrange the details.</p>
+        <p className="text-sm text-coffee-500 mt-0.5">We’ll hold it for you, email you a confirmation, and reach out to arrange the details.</p>
       </div>
 
       <div>
@@ -99,6 +105,7 @@ export function ReserveForm({ slug, base }: { slug: string; base: string }) {
           <input id="buyer_phone" type="tel" className="input" value={form.buyer_phone} onChange={(e) => set('buyer_phone', e.target.value)} required maxLength={40} autoComplete="tel" />
         </div>
       </div>
+      <GroupField id="buyer_group" value={group} onChange={setGroup} disabled={busy} />
 
       {SHOW_PICKUP_OPTIONS ? (
         <fieldset>

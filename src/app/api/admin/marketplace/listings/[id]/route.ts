@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, ADMIN_MANAGER, ADMIN_ONLY } from '@/lib/apiAuth';
-import { firstZodError, updateListingSchema } from '@/lib/marketplace';
+import { firstZodError, sellerGroupColumns, updateListingSchema } from '@/lib/marketplace';
 import { PENDING_BUCKET, PUBLIC_BUCKET, audit, db, loadListing, uniqueSlug } from '@/lib/marketplaceServer';
 
 type Params = { params: Promise<{ id: string }> };
@@ -55,7 +55,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   if (seller && Object.keys(seller).length) {
-    const { error } = await db.from('marketplace_sellers').update({ ...seller, updated_at: new Date().toISOString() }).eq('id', before.seller_id);
+    const { error } = await db.from('marketplace_sellers').update({ ...seller, ...sellerGroupColumns(seller), updated_at: new Date().toISOString() }).eq('id', before.seller_id);
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 

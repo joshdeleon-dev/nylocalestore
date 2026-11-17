@@ -79,11 +79,44 @@ const percent = z.coerce.number().min(0, 'Donation can’t be negative').max(100
 
 const priceCents = z.coerce.number().int('Price must be in whole cents').min(0, 'Price can’t be negative').max(100_000_000);
 
+// ── Group numbers ────────────────────────────────────────────────────────────
+// Sellers and buyers pick a group 1–14 or "None" (stored as a NULL group plus a reason).
+
+export const GROUP_NUMBERS = Array.from({ length: 14 }, (_, i) => i + 1);
+
+const groupNumber = z.number().int().min(1, 'Choose a group from 1 to 14').max(14, 'Choose a group from 1 to 14').nullable();
+const noGroupReason = z.string().trim().max(300).nullable().optional();
+
+// Public forms: a group is required, and "None" needs a reason
+const requireGroup = (group: number | null | undefined, reason: string | null | undefined, ctx: z.RefinementCtx, path: string) => {
+  if (group === undefined) ctx.addIssue({ code: 'custom', message: 'Choose your group number', path: [path] });
+  else if (group === null && !reason) ctx.addIssue({ code: 'custom', message: 'Tell us why you don’t have a group number', path: [path] });
+};
+
+// Keep only the reason that applies: a group number clears it
+export const cleanGroup = (group: number | null | undefined, reason: string | null | undefined) =>
+  group ? { group, reason: null } : { group: null, reason: reason || null };
+
+// Admin seller edits: only touch the group columns when the group was sent
+export const sellerGroupColumns = (s: { group_number?: number | null; no_group_reason?: string | null }) => {
+  if (s.group_number === undefined) return {};
+  const { group, reason } = cleanGroup(s.group_number, s.no_group_reason);
+  return { group_number: group, no_group_reason: reason };
+};
+
+export const groupLabel = (group: number | null | undefined, reason?: string | null) =>
+  group ? `Group ${group}` : reason ? 'None' : 'Not set';
+
 export const sellerSchema = z.object({
   name: z.string().trim().min(1, 'Seller name is required').max(120),
   email: z.string().trim().email('Valid seller email is required').max(200),
   phone: z.string().trim().min(7, 'Seller phone is required').max(40),
+  // Optional for admins; the public form requires them (publicSellerSchema)
+  group_number: groupNumber.optional(),
+  no_group_reason: noGroupReason,
 });
+
+const publicSellerSchema = sellerSchema.superRefine((s, ctx) => requireGroup(s.group_number, s.no_group_reason, ctx, 'group_number'));
 
 export const listingFieldsSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(120),
@@ -103,7 +136,7 @@ export const publicSubmissionSchema = listingFieldsSchema.omit({ admin_notes: tr
   asking_price_cents: priceCents.min(1, 'Enter a price'),
   // Sellers must pick a quick option; only admins can set other percentages
   locale_percent: percent.refine((n) => QUICK_PICK_PERCENTS.includes(n), 'Choose 30%, 50% or 100%'),
-  seller: sellerSchema,
+  seller: publicSellerSchema,
   paths: z.array(z.string()).min(1, 'Add at least one photo').max(10, 'At most 10 photos'),
   consent: z.literal(true, { errorMap: () => ({ message: 'Please confirm the agreement to continue' }) }),
 });
@@ -180,8 +213,11 @@ export const reservationSchema = z
     pickup_city: z.string().trim().max(100).optional(),
     pickup_state: z.string().trim().max(50).optional(),
     pickup_zip: z.string().trim().max(10).optional(),
+    buyer_group_number: groupNumber.optional(),
+    buyer_no_group_reason: noGroupReason,
   })
   .superRefine((r, ctx) => {
+    requireGroup(r.buyer_group_number, r.buyer_no_group_reason, ctx, 'buyer_group_number');
     if (r.pickup_type !== 'other') return;
     if (!r.pickup_street) ctx.addIssue({ code: 'custom', message: 'Street address is required', path: ['pickup_street'] });
     if (!r.pickup_city) ctx.addIssue({ code: 'custom', message: 'City is required', path: ['pickup_city'] });

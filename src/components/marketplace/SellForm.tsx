@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { LocaleSplitCalculator } from './LocaleSplitCalculator';
+import { GroupField, emptyGroup, groupError, groupPayload } from './GroupField';
 import { CONDITION_LABELS } from '@/lib/marketplace';
 import { MAX_PHOTOS, checkPhoto, uploadPhotos } from '@/lib/marketplaceUpload';
 import { ListingCondition } from '@/types/marketplace';
@@ -21,6 +22,7 @@ export function SellForm({ base, categories }: Props) {
     name: '', email: '', phone: '',
     title: '', description: '', condition: '' as ListingCondition | '', category_id: '',
     priceCents: null as number | null, percent: 0, consent: false,
+    group: emptyGroup,
   });
   const [error, setError] = useState('');
   const [status, setStatus] = useState<'idle' | 'uploading' | 'saving'>('idle');
@@ -52,6 +54,7 @@ export function SellForm({ base, categories }: Props) {
     if (!form.condition) return setError('Choose the item’s condition');
     if (!form.priceCents) return setError('Enter your price');
     if (!form.percent) return setError('Choose how much to donate to the locale');
+    if (groupError(form.group)) return setError(groupError(form.group));
     if (!form.consent) return setError('Please confirm the agreement to continue');
 
     try {
@@ -63,7 +66,7 @@ export function SellForm({ base, categories }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'submit',
-          seller: { name: form.name, email: form.email, phone: form.phone },
+          seller: { name: form.name, email: form.email, phone: form.phone, ...groupPayload(form.group) },
           title: form.title,
           description: form.description,
           condition: form.condition,
@@ -76,7 +79,7 @@ export function SellForm({ base, categories }: Props) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Something went wrong — please try again');
-      router.push(`${base}/sell/thanks?ref=${json.reference}`);
+      router.push(`${base}/sell/thanks?ref=${json.reference}&t=${encodeURIComponent(json.tracking_token)}`);
     } catch (err: any) {
       setError(err.message);
       setStatus('idle');
@@ -149,7 +152,7 @@ export function SellForm({ base, categories }: Props) {
         />
       </Section>
 
-      <Section title="Your contact details" hint="Private — only our staff see these, to arrange the sale with you.">
+      <Section title="Your contact details" hint="Private — only our staff see these, to arrange the sale with you. We’ll email you a link to track your item.">
         <Field label="Full name *">
           <input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} required maxLength={120} autoComplete="name" />
         </Field>
@@ -161,6 +164,7 @@ export function SellForm({ base, categories }: Props) {
             <input type="tel" className="input" value={form.phone} onChange={(e) => set('phone', e.target.value)} required minLength={7} maxLength={40} autoComplete="tel" />
           </Field>
         </div>
+        <GroupField id="seller_group" value={form.group} onChange={(v) => set('group', v)} disabled={busy} />
       </Section>
 
       <label className="flex gap-3 items-start text-sm text-coffee-700 cursor-pointer">

@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { MAX_OPEN_RESERVATIONS, firstZodError, normalizeEmail, normalizePhone, reservationSchema } from '@/lib/marketplace';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { sendEmail } from '@/lib/email';
+import { MAX_OPEN_RESERVATIONS, cleanGroup, firstZodError, formatPickup, normalizeEmail, normalizePhone, reservationSchema } from '@/lib/marketplace';
+import { buyerReservationEmail } from '@/lib/marketplaceEmails';
 import { isMarketplaceEnabled } from '@/lib/marketplaceSite';
-import { audit, db, newReservationToken } from '@/lib/marketplaceServer';
+import { audit, db, marketplaceUrl, newReservationToken } from '@/lib/marketplaceServer';
 
-// Public: reserve a published item. Returns the token for the buyer's private link.
+// Public: reserve a published item. Emails the buyer a confirmation and returns the token for their private link.
 export async function POST(req: NextRequest) {
   if (!isMarketplaceEnabled()) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
@@ -12,9 +14,10 @@ export async function POST(req: NextRequest) {
   const r = parsed.data;
   const other = r.pickup_type === 'other';
 
-  const { data: listing } = await db.from('marketplace_listings').select('id').eq('slug', r.slug).maybeSingle();
+  const { data: listing } = await db.from('marketplace_listings').select('id, title, asking_price_cents').eq('slug', r.slug).maybeSingle();
   if (!listing) return NextResponse.json({ success: false, error: 'This item is no longer available' }, { status: 404 });
 
+  const { group, reason } = cleanGroup(r.buyer_group_number, r.buyer_no_group_reason);
   const { token, hash } = newReservationToken();
   const { data: reservationId, error } = await db.rpc('marketplace_reserve', {
     p_listing_id: listing.id,
@@ -30,6 +33,8 @@ export async function POST(req: NextRequest) {
     p_state: other ? r.pickup_state : null,
     p_zip: other ? r.pickup_zip : null,
     p_token_hash: hash,
+    p_group_number: group,
+    p_no_group_reason: reason,
     p_max_open: MAX_OPEN_RESERVATIONS,
   });
 
@@ -49,5 +54,14 @@ export async function POST(req: NextRequest) {
 
   await audit(null, 'reservation', reservationId, 'reserve', null, { listing_id: listing.id, pickup_type: r.pickup_type });
   await audit(null, 'listing', listing.id, 'reserved', { status: 'published' }, { status: 'reserved', reservation_id: reservationId });
+
+  // The price is read at reservation time; sent after the response so the buyer isn't kept waiting
+  const email = buyerReservationEmail({
+    to: r.buyer_email, name: r.buyer_name, reservationId, title: listing.title, priceCents: listing.asking_price_cents,
+    pickup: formatPickup(r), group, noGroupReason: reason, reservationUrl: marketplaceUrl(req, `/reservation/${token}`),
+  });
+  after(async () => {
+    if (await sendEmail(email)) await audit(null, 'reservation', reservationId, 'buyer_emailed', null, { type: 'reservation_confirmation' });
+  });
   return NextResponse.json({ success: true, token }, { status: 201 });
 }

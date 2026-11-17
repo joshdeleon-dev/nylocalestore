@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, ADMIN_MANAGER } from '@/lib/apiAuth';
-import { CONDITION_LABELS } from '@/lib/marketplace';
+import { CONDITION_LABELS, RESERVATION_STATUS_LABELS, STATUS_LABELS, formatPickup, groupLabel } from '@/lib/marketplace';
+import { ReportBasis, ReportItem } from '@/lib/marketplaceReport';
 import { db } from '@/lib/marketplaceServer';
 
 // UTC instant of midnight in New York on the given YYYY-MM-DD (handles daylight saving)
@@ -15,7 +16,61 @@ const isDate = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.t
 const sum = (rows: any[], key: string) => rows.reduce((t, r) => t + (r[key] ?? 0), 0);
 const nyDate = (iso: string | null) => (iso ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(iso)) : '');
 
-// ?from=YYYY-MM-DD&to=YYYY-MM-DD (inclusive, New York days; both optional = all time) &format=csv
+// One pivot-report row per item. 'sold' = items whose buyer paid in the range; 'all' = items submitted in the range.
+async function loadReportItems(basis: ReportBasis, start: string | null, end: string | null): Promise<ReportItem[]> {
+  let q = db
+    .from('marketplace_listings')
+    .select('id, title, condition, status, is_flagship, archived_at, locale_percent, asking_price_cents, locale_amount_cents, seller_payout_cents, created_at, category:marketplace_categories(name), seller:marketplace_sellers(name, email, phone, group_number, no_group_reason), sale:marketplace_sales' + (basis === 'sold' ? '!inner' : '') + '(reservation_id, sale_price_cents, locale_percent, locale_amount_cents, seller_payout_cents, buyer_paid_at, seller_paid_at), reservations:marketplace_reservations(id, buyer_name, buyer_email, buyer_phone, buyer_group_number, buyer_no_group_reason, pickup_type, pickup_street, pickup_unit, pickup_city, pickup_state, pickup_zip, status, created_at)')
+    .order('id', { ascending: false })
+    .limit(5000);
+  const col = basis === 'sold' ? 'sale.buyer_paid_at' : 'created_at';
+  if (start) q = q.gte(col, start);
+  if (end) q = q.lt(col, end);
+  const { data, error } = await q;
+  if (error) throw error;
+
+  return (data ?? []).map((l: any) => {
+    const sale = (Array.isArray(l.sale) ? l.sale[0] : l.sale) ?? null;
+    const reservations: any[] = l.reservations ?? [];
+    // The buyer who paid, else whoever holds it now
+    const buyer = (sale?.reservation_id && reservations.find((r) => r.id === sale.reservation_id))
+      ?? reservations.filter((r) => r.status === 'requested' || r.status === 'confirmed').sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+      ?? null;
+    return {
+      listing_id: l.id,
+      item: l.title,
+      category: l.category?.name ?? 'Uncategorized',
+      condition: CONDITION_LABELS[l.condition as keyof typeof CONDITION_LABELS] ?? l.condition,
+      status: STATUS_LABELS[l.status as keyof typeof STATUS_LABELS] ?? l.status,
+      flagship: l.is_flagship ? 'Yes' : 'No',
+      archived: l.archived_at ? 'Yes' : 'No',
+      locale_percent: Number(sale?.locale_percent ?? l.locale_percent),
+      submitted_date: nyDate(l.created_at),
+      seller_name: l.seller?.name ?? '',
+      seller_email: l.seller?.email ?? '',
+      seller_phone: l.seller?.phone ?? '',
+      seller_group: groupLabel(l.seller?.group_number, l.seller?.no_group_reason),
+      seller_no_group_reason: l.seller?.no_group_reason ?? '',
+      buyer_name: buyer?.buyer_name ?? '',
+      buyer_email: buyer?.buyer_email ?? '',
+      buyer_phone: buyer?.buyer_phone ?? '',
+      buyer_group: buyer ? groupLabel(buyer.buyer_group_number, buyer.buyer_no_group_reason) : '',
+      buyer_no_group_reason: buyer?.buyer_no_group_reason ?? '',
+      pickup: buyer ? formatPickup(buyer) : '',
+      reservation_status: buyer ? RESERVATION_STATUS_LABELS[buyer.status as keyof typeof RESERVATION_STATUS_LABELS] ?? buyer.status : '',
+      sold_date: nyDate(sale?.buyer_paid_at ?? null),
+      seller_paid: sale ? (sale.seller_paid_at ? 'Yes' : 'No') : '',
+      seller_paid_date: nyDate(sale?.seller_paid_at ?? null),
+      asking_price_cents: l.asking_price_cents,
+      sale_price_cents: sale?.sale_price_cents ?? null,
+      locale_amount_cents: sale?.locale_amount_cents ?? l.locale_amount_cents,
+      seller_payout_cents: sale?.seller_payout_cents ?? l.seller_payout_cents,
+    };
+  });
+}
+
+// ?from=YYYY-MM-DD&to=YYYY-MM-DD (inclusive, New York days; both optional = all time)
+// &view=items&basis=sold|all → pivot report rows instead of the summary
 export async function GET(req: NextRequest) {
   const auth = await requireRole(req, ADMIN_MANAGER);
   if (auth instanceof NextResponse) return auth;
@@ -28,6 +83,16 @@ export async function GET(req: NextRequest) {
   }
   const start = isDate(from) ? nyMidnight(from).toISOString() : null;
   const end = isDate(to) ? new Date(nyMidnight(to).getTime() + 86_400_000).toISOString() : null; // exclusive
+
+  if (url.searchParams.get('view') === 'items') {
+    const basis: ReportBasis = url.searchParams.get('basis') === 'all' ? 'all' : 'sold';
+    try {
+      return NextResponse.json({ success: true, basis, items: await loadReportItems(basis, start, end) });
+    } catch (e: any) {
+      console.error('Report items failed:', e);
+      return NextResponse.json({ success: false, error: e.message ?? 'Failed to load report' }, { status: 500 });
+    }
+  }
 
   // Sales whose buyer paid within the range
   let salesQuery = db
@@ -96,28 +161,6 @@ export async function GET(req: NextRequest) {
     awaiting_buyer_payment: reserved.count ?? 0,
     open_reservations: openReservations.count ?? 0,
   };
-
-  if (url.searchParams.get('format') === 'csv') {
-    const money = (c: number) => (c / 100).toFixed(2);
-    const header = ['Listing ID', 'Item', 'Category', 'Condition', 'Status', 'Seller', 'Seller phone', 'Buyer', 'Buyer phone', 'Sale price', 'For Locale %', 'For Locale', 'Seller payout', 'Buyer paid (date)', 'Buyer paid (by)', 'Seller paid (date)', 'Seller paid (by)'];
-    const lines = sold.map((s) => [
-      s.listing_id, s.title, s.category, s.condition, s.status, s.seller_name, s.seller_phone, s.buyer_name, s.buyer_phone,
-      money(s.sale_price_cents), s.locale_percent, money(s.locale_amount_cents), money(s.seller_payout_cents),
-      nyDate(s.buyer_paid_at), s.buyer_paid_by, nyDate(s.seller_paid_at), s.seller_paid_by,
-    ]);
-    lines.push([], ['Totals', '', '', '', `${summary.sales_count} sales`, '', '', '', '', money(summary.total_sales_cents), '', money(summary.locale_total_cents), money(summary.seller_share_cents)]);
-    // Quote every cell; neutralise spreadsheet formulas in user-entered text
-    const cell = (v: unknown) => {
-      let s = String(v ?? '');
-      if (/^[=+\-@\t\r]/.test(s) && Number.isNaN(Number(s))) s = `'${s}`;
-      return `"${s.replace(/"/g, '""')}"`;
-    };
-    const csv = [header, ...lines].map((l) => l.map(cell).join(',')).join('\r\n');
-    const name = `marketplace-sales_${from ?? 'all'}_${to ?? 'time'}.csv`;
-    return new NextResponse('﻿' + csv, {
-      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` },
-    });
-  }
 
   return NextResponse.json({ success: true, summary, sales: sold });
 }

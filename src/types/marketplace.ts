@@ -28,6 +28,8 @@ export interface MarketplaceSeller {
   name: string;
   email: string;
   phone: string;
+  group_number: number | null;
+  no_group_reason: string | null;
   consent_at: string | null;
 }
 
@@ -87,6 +89,8 @@ export interface MarketplaceReservation {
   buyer_name: string;
   buyer_email: string;
   buyer_phone: string;
+  buyer_group_number: number | null;
+  buyer_no_group_reason: string | null;
   pickup_type: PickupType;
   pickup_street: string | null;
   pickup_unit: string | null;

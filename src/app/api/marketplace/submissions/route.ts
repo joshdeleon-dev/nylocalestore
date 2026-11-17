@@ -1,14 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { NextRequest, NextResponse } from 'next/server';
-import { firstZodError, publicSubmissionSchema } from '@/lib/marketplace';
+import { NextRequest, NextResponse, after } from 'next/server';
+import { sendEmail } from '@/lib/email';
+import { calcLocaleSplit, cleanGroup, firstZodError, publicSubmissionSchema } from '@/lib/marketplace';
+import { sellerSubmissionEmail } from '@/lib/marketplaceEmails';
 import { isMarketplaceEnabled } from '@/lib/marketplaceSite';
 import {
-  audit, createUploadUrls, db, uniqueSlug, verifyUploads, UploadError, MAX_IMAGES_PER_LISTING,
+  audit, createUploadUrls, db, marketplaceUrl, newReservationToken, uniqueSlug, verifyUploads, UploadError, MAX_IMAGES_PER_LISTING,
 } from '@/lib/marketplaceServer';
 
 // Public "Sell an item" endpoint, in two steps (photos upload straight to private storage):
 //   { action: 'sign', files: [{ type, size }] }   → signed upload URLs in a fresh folder
-//   { action: 'submit', ...fields, paths, consent } → creates the seller + listing as 'submitted'
+//   { action: 'submit', ...fields, paths, consent } → creates the seller + listing as 'submitted',
+//     emails the seller a private tracking link and returns its token
 export async function POST(req: NextRequest) {
   if (!isMarketplaceEnabled()) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
 
@@ -44,16 +47,18 @@ export async function POST(req: NextRequest) {
       if (!cat) return NextResponse.json({ success: false, error: 'Please choose a valid category' }, { status: 400 });
     }
 
+    const { group, reason } = cleanGroup(seller.group_number, seller.no_group_reason);
     const { data: sellerRow, error: sellerError } = await db
       .from('marketplace_sellers')
-      .insert({ ...seller, consent_at: new Date().toISOString() })
+      .insert({ ...seller, group_number: group, no_group_reason: reason, consent_at: new Date().toISOString() })
       .select('id')
       .single();
     if (sellerError) throw sellerError;
 
+    const tracking = newReservationToken();
     const { data: listing, error } = await db
       .from('marketplace_listings')
-      .insert({ ...fields, seller_id: sellerRow.id, slug: await uniqueSlug(fields.title), status: 'submitted' })
+      .insert({ ...fields, seller_id: sellerRow.id, slug: await uniqueSlug(fields.title), status: 'submitted', seller_token_hash: tracking.hash })
       .select('id')
       .single();
     if (error) {
@@ -71,7 +76,19 @@ export async function POST(req: NextRequest) {
     }
 
     await audit(null, 'listing', listing.id, 'submit', null, { ...fields, image_count: paths.length });
-    return NextResponse.json({ success: true, reference: listing.id }, { status: 201 });
+
+    // Sent after the response so a slow email service never holds up the seller
+    const split = calcLocaleSplit(fields.asking_price_cents, fields.locale_percent);
+    const email = sellerSubmissionEmail({
+      to: seller.email, name: seller.name, reference: listing.id, title: fields.title,
+      priceCents: fields.asking_price_cents, percent: fields.locale_percent, localeCents: split.localeCents, payoutCents: split.payoutCents,
+      group, noGroupReason: reason, trackUrl: marketplaceUrl(req, `/track/${tracking.token}`),
+    });
+    after(async () => {
+      if (await sendEmail(email)) await audit(null, 'listing', listing.id, 'seller_emailed', null, { type: 'submission_confirmation' });
+    });
+
+    return NextResponse.json({ success: true, reference: listing.id, tracking_token: tracking.token }, { status: 201 });
   } catch (e: any) {
     if (e instanceof UploadError) return NextResponse.json({ success: false, error: e.message }, { status: 400 });
     console.error('Marketplace submission failed:', e);

@@ -8,7 +8,7 @@ import { LocaleSplitCalculator } from './LocaleSplitCalculator';
 import { checkPhoto, uploadPhotos } from '@/lib/marketplaceUpload';
 import { PaymentCheckboxes, PaymentRow } from './PaymentCheckboxes';
 import {
-  ALLOWED_ACTIONS, CONDITION_LABELS, STATUS_BADGE, STATUS_LABELS, formatCents,
+  ALLOWED_ACTIONS, CONDITION_LABELS, GROUP_NUMBERS, STATUS_BADGE, STATUS_LABELS, formatCents,
 } from '@/lib/marketplace';
 import {
   ListingAction, ListingCondition, MarketplaceAuditEntry, MarketplaceCategory, MarketplaceListing,
@@ -49,7 +49,7 @@ const emptyForm = {
   locale_percent: 0,
   admin_notes: '',
   flagship_manual: false,
-  seller: { name: '', email: '', phone: '' },
+  seller: { name: '', email: '', phone: '', group: '', reason: '' },
 };
 
 export function ListingEditor({ listingId, categories, onClose, onChanged, canDelete }: Props) {
@@ -79,7 +79,12 @@ export function ListingEditor({ listingId, categories, onClose, onChanged, canDe
       locale_percent: Number(l.locale_percent),
       admin_notes: l.admin_notes ?? '',
       flagship_manual: l.flagship_manual,
-      seller: { name: l.seller?.name ?? '', email: l.seller?.email ?? '', phone: l.seller?.phone ?? '' },
+      seller: {
+        name: l.seller?.name ?? '', email: l.seller?.email ?? '', phone: l.seller?.phone ?? '',
+        // '' = not set (older listings), 'none' = no group with a reason
+        group: l.seller?.group_number ? String(l.seller.group_number) : l.seller?.no_group_reason ? 'none' : '',
+        reason: l.seller?.no_group_reason ?? '',
+      },
     });
   };
 
@@ -117,7 +122,11 @@ export function ListingEditor({ listingId, categories, onClose, onChanged, canDe
       locale_percent: form.locale_percent,
       admin_notes: form.admin_notes || null,
       flagship_manual: form.flagship_manual,
-      seller: form.seller,
+      seller: {
+        name: form.seller.name, email: form.seller.email, phone: form.seller.phone,
+        group_number: form.seller.group && form.seller.group !== 'none' ? Number(form.seller.group) : null,
+        no_group_reason: form.seller.group === 'none' ? form.seller.reason.trim() || null : null,
+      },
     };
     const res = await fetch(id ? `/api/admin/marketplace/listings/${id}` : '/api/admin/marketplace/listings', {
       method: id ? 'PATCH' : 'POST',
@@ -387,6 +396,22 @@ export function ListingEditor({ listingId, categories, onClose, onChanged, canDe
                     <label className="label">Phone *</label>
                     <input type="tel" className="input" value={form.seller.phone} onChange={(e) => setSeller('phone', e.target.value)} required disabled={readOnly} />
                   </div>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="label">Group</label>
+                    <select className="select" value={form.seller.group} onChange={(e) => setSeller('group', e.target.value)} disabled={readOnly}>
+                      <option value="">Not set</option>
+                      {GROUP_NUMBERS.map((n) => <option key={n} value={n}>Group {n}</option>)}
+                      <option value="none">None</option>
+                    </select>
+                  </div>
+                  {form.seller.group === 'none' && (
+                    <div className="sm:col-span-2">
+                      <label className="label">Reason for no group</label>
+                      <input className="input" value={form.seller.reason} onChange={(e) => setSeller('reason', e.target.value)} maxLength={300} disabled={readOnly} />
+                    </div>
+                  )}
                 </div>
                 {listing?.seller && (
                   <div className="flex gap-4 text-xs">

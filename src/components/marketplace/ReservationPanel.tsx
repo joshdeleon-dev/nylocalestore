@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Mail, MapPin, Phone, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  RESERVATION_ACTIONS, RESERVATION_STATUS_BADGE, RESERVATION_STATUS_LABELS, formatCents, formatPickup,
+  RESERVATION_ACTIONS, RESERVATION_STATUS_BADGE, RESERVATION_STATUS_LABELS, formatCents, formatPickup, groupLabel,
 } from '@/lib/marketplace';
 import { MarketplaceReservation, ReservationAction } from '@/types/marketplace';
 
@@ -122,6 +122,10 @@ export function ReservationPanel({ reservation: r, onClose, onChanged, onOpenLis
           <section className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">Buyer</h3>
             <p className="text-gray-900">{r.buyer_name}</p>
+            <p className="text-sm text-coffee-600">
+              {groupLabel(r.buyer_group_number, r.buyer_no_group_reason)}
+              {!r.buyer_group_number && r.buyer_no_group_reason && <span className="text-coffee-400"> · {r.buyer_no_group_reason}</span>}
+            </p>
             <div className="flex flex-col gap-1.5 text-sm">
               <a href={`tel:${r.buyer_phone}`} className="inline-flex items-center gap-2 text-coffee-700 hover:text-coffee-900"><Phone className="w-4 h-4" /> {r.buyer_phone}</a>
               <a href={`mailto:${r.buyer_email}`} className="inline-flex items-center gap-2 text-coffee-700 hover:text-coffee-900"><Mail className="w-4 h-4" /> {r.buyer_email}</a>

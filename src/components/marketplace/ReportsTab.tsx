@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
 import { formatCents } from '@/lib/marketplace';
+import { PivotReport } from './PivotReport';
 
 export interface ReportSummary {
   sales_count: number;
@@ -81,7 +81,6 @@ export function ReportsTab() {
   const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState(false);
 
   const { sorted: sortedSales, sortKey, sortDir, requestSort } = useTableSort(sales, {
     paid: (s) => new Date(s.buyer_paid_at).getTime(),
@@ -123,22 +122,6 @@ export function ReportsTab() {
     if (p !== 'custom') setRange(presetRange(p));
   };
 
-  // Fetch (so the auth header is attached) and save the CSV
-  const download = async () => {
-    setDownloading(true);
-    const q = query(); q.set('format', 'csv');
-    const res = await fetch(`/api/admin/marketplace/reports?${q}`);
-    setDownloading(false);
-    if (!res.ok) { toast.error('Download failed'); return; }
-    const blob = await res.blob();
-    const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'marketplace-sales.csv';
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -160,9 +143,6 @@ export function ReportsTab() {
             <input type="date" className="input py-1.5 w-auto" value={range.to} min={range.from || undefined} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} aria-label="To" />
           </div>
         )}
-        <button onClick={download} disabled={downloading || loading} className="btn btn-secondary gap-2 ml-auto">
-          {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Download CSV
-        </button>
       </div>
 
       {loading || !summary ? (
@@ -228,6 +208,8 @@ export function ReportsTab() {
           </div>
         </>
       )}
+
+      <PivotReport range={range} />
     </>
   );
 }

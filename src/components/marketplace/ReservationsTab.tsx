@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { useTableSort } from '@/hooks/useTableSort';
 import { SortableHeader } from '@/components/SortableHeader';
 import { ReservationPanel, daysSince } from './ReservationPanel';
-import { RESERVATION_STATUS_BADGE, RESERVATION_STATUS_LABELS, formatCents } from '@/lib/marketplace';
+import { RESERVATION_STATUS_BADGE, RESERVATION_STATUS_LABELS, formatCents, groupLabel } from '@/lib/marketplace';
 import { MarketplaceReservation } from '@/types/marketplace';
 
 type View = 'open' | 'closed' | 'all';
@@ -96,7 +96,7 @@ export function ReservationsTab({ onOpenListing, onChanged }: Props) {
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-gray-900">{r.buyer_name}</p>
-                        <p className="text-xs text-coffee-400">{r.buyer_phone}</p>
+                        <p className="text-xs text-coffee-400">{r.buyer_phone} · {groupLabel(r.buyer_group_number, r.buyer_no_group_reason)}</p>
                       </td>
                       <td className="px-4 py-3">
                         {r.pickup_type === 'locale'

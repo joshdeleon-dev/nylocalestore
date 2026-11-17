@@ -3,6 +3,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { slugify } from '@/lib/marketplace';
+import { NON_SHOP_SITE_HOSTS, SHOP_ORIGIN, marketplaceBase, normalizeHost } from '@/lib/marketplaceSite';
 import { MarketplaceListingImage } from '@/types/marketplace';
 
 export const db = supabaseAdmin ?? supabase;
@@ -84,7 +85,7 @@ export async function uniqueSlug(title: string, excludeId?: number) {
 }
 
 const DETAIL_SELECT =
-  '*, seller:marketplace_sellers(id, name, email, phone, consent_at), category:marketplace_categories(id, name), images:marketplace_listing_images(id, listing_id, storage_path, public_path, sort_order)';
+  '*, seller:marketplace_sellers(id, name, email, phone, group_number, no_group_reason, consent_at), category:marketplace_categories(id, name), images:marketplace_listing_images(id, listing_id, storage_path, public_path, sort_order)';
 
 // Full listing for admin views, images sorted and signed
 export async function loadListing(id: number) {
@@ -135,7 +136,16 @@ export async function unpublishImages(listingId: number) {
   await db.from('marketplace_listing_images').update({ public_path: null }).in('id', images.map((i) => i.id));
 }
 
-// Buyer's private reservation link: random token in the URL, only its hash in the database
+// Absolute link to a marketplace page for emails, on the site the request came from
+// (shop domain in production, shop-staging / preview URLs / localhost when testing)
+export function marketplaceUrl(req: { headers: Headers; nextUrl: URL }, path: string) {
+  const host = normalizeHost(req.headers.get('host'));
+  if (NON_SHOP_SITE_HOSTS.includes(host)) return `${SHOP_ORIGIN}${path}`;
+  return `${req.nextUrl.origin}${marketplaceBase(host)}${path}`;
+}
+
+// Private links (buyer's reservation, seller's tracking page): random token in the URL,
+// only its hash in the database
 export function newReservationToken() {
   const token = randomBytes(24).toString('base64url');
   return { token, hash: hashReservationToken(token) };
@@ -160,8 +170,28 @@ export async function loadReservationByToken(token: string) {
   };
 }
 
+// Load a listing for the seller's private tracking page (no buyer or admin-only details)
+export async function loadListingByTrackingToken(token: string) {
+  if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
+  const { data } = await db
+    .from('marketplace_listings')
+    .select('id, title, slug, status, archived_at, asking_price_cents, locale_percent, locale_amount_cents, seller_payout_cents, created_at, reviewed_at, published_at, seller:marketplace_sellers(name), images:marketplace_listing_images(storage_path, sort_order), sale:marketplace_sales(sale_price_cents, locale_amount_cents, seller_payout_cents, buyer_paid_at, seller_paid_at)')
+    .eq('seller_token_hash', hashReservationToken(token))
+    .maybeSingle();
+  if (!data) return null;
+  const { images, sale, seller, ...listing } = data as any;
+  const cover = [...(images ?? [])].sort((a: any, b: any) => a.sort_order - b.sort_order)[0];
+  const signed = cover ? (await db.storage.from(PENDING_BUCKET).createSignedUrl(cover.storage_path, 3600)).data?.signedUrl : null;
+  return {
+    ...listing,
+    seller_name: seller?.name ?? '',
+    cover_url: signed ?? null,
+    sale: (Array.isArray(sale) ? sale[0] : sale) ?? null,
+  };
+}
+
 export const RESERVATION_SELECT =
-  'id, listing_id, buyer_name, buyer_email, buyer_phone, pickup_type, pickup_street, pickup_unit, pickup_city, pickup_state, pickup_zip, status, canceled_by, cancel_reason, admin_notes, confirmed_at, closed_at, created_at, updated_at, listing:marketplace_listings(id, title, slug, asking_price_cents, status, images:marketplace_listing_images(storage_path, sort_order))';
+  'id, listing_id, buyer_name, buyer_email, buyer_phone, buyer_group_number, buyer_no_group_reason, pickup_type, pickup_street, pickup_unit, pickup_city, pickup_state, pickup_zip, status, canceled_by, cancel_reason, admin_notes, confirmed_at, closed_at, created_at, updated_at, listing:marketplace_listings(id, title, slug, asking_price_cents, status, images:marketplace_listing_images(storage_path, sort_order))';
 
 // Attach a signed cover thumbnail to each reservation's listing (admin views)
 export async function withReservationCovers(rows: any[]) {
