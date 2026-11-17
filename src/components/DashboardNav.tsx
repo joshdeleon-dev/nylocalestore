@@ -23,6 +23,7 @@ import {
   Sliders,
   Megaphone,
   Tag,
+  Store,
 } from 'lucide-react';
 
 interface NavItem {
@@ -41,6 +42,7 @@ const adminNav: NavItem[] = [
   { label: 'Roles', href: '/dashboard/admin/roles', icon: Shield },
   { label: 'Announcements', href: '/dashboard/admin/announcements', icon: Megaphone },
   { label: 'Order Tickets', href: '/dashboard/admin/order-tickets', icon: Tag },
+  { label: 'Marketplace', href: '/dashboard/admin/marketplace', icon: Store },
   { label: 'Reports', href: '/dashboard/admin/reports', icon: BarChart2 },
   { label: 'Settings', href: '/dashboard/admin/settings', icon: Settings },
 ];
@@ -53,6 +55,7 @@ const managerNav: NavItem[] = [
   { label: 'Inventory', href: '/dashboard/manager/inventory', icon: Archive },
   { label: 'Announcements', href: '/dashboard/manager/announcements', icon: Megaphone },
   { label: 'Order Tickets', href: '/dashboard/manager/order-tickets', icon: Tag },
+  { label: 'Marketplace', href: '/dashboard/manager/marketplace', icon: Store },
   { label: 'Reports', href: '/dashboard/manager/reports', icon: BarChart2 },
 ];
 

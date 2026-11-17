@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { NON_SHOP_SITE_HOSTS, SHOP_HOSTS, SHOP_ORIGIN, isMarketplaceEnabled, normalizeHost } from '@/lib/marketplaceSite';
 
 const PUBLIC_PATHS = ['/', '/auth', '/cart', '/checkout', '/confirmation', '/product', '/api'];
 
@@ -42,17 +43,47 @@ function getSessionFromCookies(req: NextRequest): boolean {
 // Every other host (food.*, *.vercel.app, localhost) is untouched.
 const LANDING_HOSTS = ['www.nylocalestore.com', 'nylocalestore.com', 'staging.nylocalestore.com'];
 
-// Hosts that show only the Marketplace "coming soon" page, on every path.
-const SHOP_HOSTS = ['shop.nylocalestore.com', 'shop-staging.nylocalestore.com'];
+function marketplaceRouting(req: NextRequest, host: string, pathname: string): NextResponse | null {
+  const enabled = isMarketplaceEnabled();
+  const isMarketplacePath = pathname === '/marketplace' || pathname.startsWith('/marketplace/');
+
+  if (SHOP_HOSTS.includes(host)) {
+    // Until launch, every path on the shop domain is the Coming Soon page
+    if (!enabled) return NextResponse.rewrite(new URL('/coming-soon', req.url));
+    if (pathname.startsWith('/api/marketplace/')) return null;
+    if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    // Pretty URLs on the shop domain: /marketplace/item/x → /item/x (query string kept)
+    const url = req.nextUrl.clone();
+    if (isMarketplacePath) {
+      url.pathname = pathname.slice('/marketplace'.length) || '/';
+      return NextResponse.redirect(url);
+    }
+    url.pathname = `/marketplace${pathname === '/' ? '' : pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  if (!isMarketplacePath) return null;
+
+  // The marketplace only lives on the shop domain, never on www./food.
+  if (NON_SHOP_SITE_HOSTS.includes(host)) {
+    const origin = host === 'staging.nylocalestore.com' ? 'https://shop-staging.nylocalestore.com' : SHOP_ORIGIN;
+    const target = new URL(pathname.slice('/marketplace'.length) || '/', origin);
+    target.search = req.nextUrl.search;
+    return NextResponse.redirect(target);
+  }
+
+  // localhost and preview URLs can reach /marketplace directly, but only when enabled
+  return enabled ? null : NextResponse.rewrite(new URL('/coming-soon', req.url));
+}
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const { pathname } = req.nextUrl;
 
-  const host = (req.headers.get('host') ?? '').split(':')[0].toLowerCase();
-  if (SHOP_HOSTS.includes(host)) {
-    return NextResponse.rewrite(new URL('/coming-soon', req.url));
-  }
+  const host = normalizeHost(req.headers.get('host'));
+  const marketplace = marketplaceRouting(req, host, pathname);
+  if (marketplace) return marketplace;
+
   if (pathname === '/' && LANDING_HOSTS.includes(host)) {
     return NextResponse.rewrite(new URL('/landing', req.url));
   }
